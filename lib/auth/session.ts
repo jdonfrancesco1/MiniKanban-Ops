@@ -1,4 +1,5 @@
-import { cookies } from "next/headers"
+import { cookies, headers } from "next/headers"
+import { getPresentedOpsSecret } from "@/lib/auth/request"
 import {
   createSessionToken,
   isAuthGateEnabled,
@@ -18,7 +19,14 @@ export async function getSessionCookie() {
 
 export async function isOpsAuthenticated() {
   if (!isAuthGateEnabled()) return true
-  return verifySessionToken(await getSessionCookie())
+  if (await verifySessionToken(await getSessionCookie())) return true
+
+  try {
+    const presented = getPresentedOpsSecret(await headers())
+    return presented ? verifyOpsSecret(presented) : false
+  } catch {
+    return false
+  }
 }
 
 export async function requireOpsSession() {

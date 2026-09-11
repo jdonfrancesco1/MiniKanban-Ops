@@ -13,7 +13,7 @@ Visual board for chat work. Default columns:
 - Waiting
 - Done
 
-Thin MCP later so Orca can move cards from chat. Not a pane inside Grok Bot chat.
+Thin HTTP API so Orca can list and move cards from Grok Bot chat widgets. The visual board stays on this Repl — chat shows pickable card widgets, not an iframe. MCP can come later.
 
 ## Product Vision
 
@@ -69,6 +69,56 @@ Open [http://localhost:3000](http://localhost:3000). Home deep-links to the ops 
 ## Auth (v1)
 
 Single-user gate. Enter `OPS_BOARD_SECRET` on `/` or `/auth`. Session cookie: `ops_board_session`. No Clerk, no Firebase, no phone auth. Email magic can come later.
+
+There is one password. Browser UI and Orca both use `OPS_BOARD_SECRET`. Do not invent a second secret.
+
+## Chat / agent API (Orca)
+
+Private first slice for James ↔ Orca dogfood. Same Neon board the Repl UI uses.
+
+**Authenticate with either:**
+
+1. Existing session cookie `ops_board_session` (browser), or
+2. Agent headers (no cookie jar):
+   - `Authorization: Bearer <OPS_BOARD_SECRET>`
+   - or `X-Ops-Board-Secret: <OPS_BOARD_SECRET>`
+
+Missing or wrong credentials return `401` JSON: `{ "error": "Unauthorized" }`. If `OPS_BOARD_SECRET` is unset, the gate is open (local/dev).
+
+### `GET /api/ops/board`
+
+Ensures the default Ops board exists. Returns `{ board: { id, title, slug, columns: [{ id, title, order, tasks: [{ id, title, description, order, columnId }] }] } }`.
+
+```bash
+curl -sS http://localhost:3000/api/ops/board \
+  -H "Authorization: Bearer $OPS_BOARD_SECRET"
+```
+
+### `POST /api/ops/tasks`
+
+Body `{ "title": "…", "columnTitle": "Need you" }`. `columnTitle` is optional and defaults to **Need you**. Creates the card at the end of that column. Returns `{ task, columnId }`.
+
+```bash
+curl -sS http://localhost:3000/api/ops/tasks \
+  -H "Authorization: Bearer $OPS_BOARD_SECRET" \
+  -H "Content-Type: application/json" \
+  -d '{"title":"Follow up with James"}'
+```
+
+### `POST /api/ops/tasks/:id/move`
+
+Body `{ "columnTitle": "I'm on" }` or `{ "columnId": "…" }`. Moves the card to the end of that column. Returns `{ task }`.
+
+```bash
+curl -sS http://localhost:3000/api/ops/tasks/TASK_ID/move \
+  -H "Authorization: Bearer $OPS_BOARD_SECRET" \
+  -H "Content-Type: application/json" \
+  -d "{\"columnTitle\":\"I'm on\"}"
+```
+
+Optional: `PATCH /api/ops/tasks/:id` with `{ "title" }` and/or `{ "description" }`.
+
+Equivalent agent header: `-H "X-Ops-Board-Secret: $OPS_BOARD_SECRET"`.
 
 ## Out of scope
 
