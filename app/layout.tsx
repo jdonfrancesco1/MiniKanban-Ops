@@ -2,6 +2,7 @@ import type React from "react"
 import { AuthProvider } from "@/contexts/auth-context"
 import { ThemeProvider } from "@/components/theme-provider"
 import { UndoProvider } from "@/hooks/use-undo"
+import { Toaster } from "@/components/ui/toaster"
 import "./globals.css"
 import "./stickers.css"
 import "./react-quill.css"
@@ -16,7 +17,10 @@ export default function RootLayout({
       <body className="bg-[#1a0b2e]">
         <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false} disableTransitionOnChange>
           <AuthProvider>
-            <UndoProvider>{children}</UndoProvider>
+            <UndoProvider>
+              {children}
+              <Toaster />
+            </UndoProvider>
           </AuthProvider>
         </ThemeProvider>
       </body>
@@ -25,5 +29,6 @@ export default function RootLayout({
 }
 
 export const metadata = {
-      generator: 'v0.app'
-    };
+  title: "MiniKanban Ops",
+  description: "James ↔ Grok Bot (Orca) ops board",
+}
