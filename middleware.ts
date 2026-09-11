@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server"
-import { OPS_SESSION_COOKIE, verifySessionToken } from "@/lib/auth/token"
+import { isOpsRequestAuthorized } from "@/lib/auth/request"
 
 const PUBLIC_PREFIXES = ["/_next", "/favicon", "/icon", "/placeholder", "/api/auth"]
 
@@ -15,8 +15,7 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next()
   }
 
-  const token = request.cookies.get(OPS_SESSION_COOKIE)?.value
-  const authenticated = await verifySessionToken(token)
+  const authenticated = await isOpsRequestAuthorized(request)
 
   if (isPublicPath(pathname)) {
     if (authenticated && (pathname === "/auth" || pathname === "/login")) {

@@ -329,6 +329,13 @@ export async function restoreColumn(boardId: string, column: Column) {
   return { success: true }
 }
 
+export async function getTaskById(taskId: string): Promise<Task | null> {
+  await requireOpsSession()
+  const [row] = await db.select().from(tasks).where(eq(tasks.id, taskId)).limit(1)
+  if (!row || row.archivedAt) return null
+  return mapTask(row)
+}
+
 export async function addTask(
   boardId: string,
   columnId: string,
