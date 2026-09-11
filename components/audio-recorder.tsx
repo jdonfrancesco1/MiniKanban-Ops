@@ -138,7 +138,7 @@ export function AudioRecorder({ boardId, cardId, onRecordingComplete }: AudioRec
       const timestamp = Date.now()
       const fileName = `recording_${timestamp}.webm`
 
-      // Upload to Firebase
+      // Audio upload is disabled (no object storage in v1)
       const result = await uploadAudio(audioBlob, fileName, boardId, recordingTime, cardId)
 
       if (result) {

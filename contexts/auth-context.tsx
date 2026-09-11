@@ -1,68 +1,64 @@
 "use client"
 
-import { createContext, useContext, useState, useEffect, type ReactNode } from "react"
-import { onAuthStateChanged, type User as FirebaseUser } from "firebase/auth"
-import { auth } from "@/lib/firebase"
-import { isPreviewEnvironment } from "@/lib/environment"
+import { createContext, useContext, useEffect, useState, type ReactNode } from "react"
 
-type User = {
+export type OpsUser = {
   uid: string
   phoneNumber: string | null
   displayName?: string | null
 }
 
 type AuthContextType = {
-  user: User | null
+  user: OpsUser | null
   loading: boolean
+  gateEnabled: boolean
+  refresh: () => Promise<void>
+  logout: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextType>({
   user: null,
   loading: true,
+  gateEnabled: false,
+  refresh: async () => {},
+  logout: async () => {},
 })
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null)
+  const [user, setUser] = useState<OpsUser | null>(null)
   const [loading, setLoading] = useState(true)
+  const [gateEnabled, setGateEnabled] = useState(false)
+
+  const refresh = async () => {
+    try {
+      const response = await fetch("/api/auth/me", { cache: "no-store" })
+      const data = await response.json()
+      setGateEnabled(Boolean(data.gateEnabled))
+      setUser(data.authenticated ? data.user : null)
+    } catch (error) {
+      console.error("Failed to load auth state", error)
+      setUser(null)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const logout = async () => {
+    await fetch("/api/auth/logout", { method: "POST" })
+    setUser(null)
+    window.location.href = "/auth"
+  }
 
   useEffect(() => {
-    // In preview mode, always provide a mock user
-    if (isPreviewEnvironment()) {
-      setUser({
-        uid: "mock-user-id",
-        phoneNumber: "+1234567890",
-        displayName: "Preview User",
-      })
-      setLoading(false)
-      return
-    }
-
-    const unsubscribe = onAuthStateChanged(auth, (firebaseUser: FirebaseUser | null) => {
-      if (firebaseUser) {
-        setUser({
-          uid: firebaseUser.uid,
-          phoneNumber: firebaseUser.phoneNumber,
-          displayName: firebaseUser.displayName,
-        })
-      } else {
-        setUser(null)
-      }
-      setLoading(false)
-    })
-
-    return () => unsubscribe()
+    void refresh()
   }, [])
 
-  return <AuthContext.Provider value={{ user, loading }}>{children}</AuthContext.Provider>
+  return (
+    <AuthContext.Provider value={{ user, loading, gateEnabled, refresh, logout }}>
+      {children}
+    </AuthContext.Provider>
+  )
 }
 
-export const useAuthContext = () => {
-  const context = useContext(AuthContext)
-  if (context === undefined) {
-    throw new Error("useAuthContext must be used within an AuthProvider")
-  }
-  return context
-}
-
-// Keep the original useAuth as an alias for backward compatibility
+export const useAuthContext = () => useContext(AuthContext)
 export const useAuth = useAuthContext

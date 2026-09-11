@@ -14,7 +14,7 @@ import {
 import { Label } from "@/components/ui/label"
 import { Loader2, X, Plus } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
-import type { Task } from "@/lib/db-service" // Assuming updateTask is correctly imported
+import { updateTask, type Task } from "@/lib/db-service"
 import dynamic from "next/dynamic"
 import "react-quill/dist/quill.snow.css"
 import { Badge } from "@/components/ui/badge"
@@ -91,7 +91,7 @@ export function TaskEditModal({ open, onOpenChange, task, boardId, columnId, onS
       // DBService.updateTask expects (boardId, columnId, taskId, updates)
       // columnId here is the original columnId of the task. If the task can move columns,
       // this modal might need a way to update columnId too, or it's handled by drag-and-drop.
-      const result = await DBService.updateTask(boardId, columnId, task.id, updates)
+      const result = await updateTask(boardId, columnId, task.id, updates)
 
       if (!result.success) {
         throw new Error((result as any).error || "Failed to update task")

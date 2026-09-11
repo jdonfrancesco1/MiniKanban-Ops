@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/alert-dialog"
 import { useToast } from "@/hooks/use-toast"
 import { useUndo } from "@/hooks/use-undo"
-import { type Task, deleteTask } from "@/lib/db-service"
+import { deleteTask, type Task } from "@/lib/db-service"
 import { cn } from "@/lib/utils"
 import { FormattedDescription } from "./formatted-description"
 import { TaskEditModal } from "./task-edit-modal"
@@ -36,6 +36,8 @@ type KanbanCardProps = {
   onStickerAdd?: (sticker: StickerItem) => void
   onStickerMove?: (stickerId: string, position: { x: number; y: number }) => void
   onStickerRemove?: (stickerId: string) => void
+  onDeleted?: () => void
+  onUpdated?: (task: Task) => void
 }
 
 export function KanbanCard({
@@ -47,6 +49,8 @@ export function KanbanCard({
   onStickerAdd,
   onStickerMove,
   onStickerRemove,
+  onDeleted,
+  onUpdated,
 }: KanbanCardProps) {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
@@ -132,6 +136,7 @@ export function KanbanCard({
         title: "Task deleted",
         description: `Task "${task.title}" has been deleted.`,
       })
+      onDeleted?.()
     } catch (error) {
       console.error("Error deleting task:", error)
       toast({
@@ -162,12 +167,9 @@ export function KanbanCard({
   }
 
   // Handle task update
-  const handleTaskUpdated = () => {
-    console.log("[KanbanCard] Task updated successfully")
-    // Close the modal after successful update
+  const handleTaskUpdated = (updatedTask: Task) => {
     setShowEditModal(false)
-
-    // Show success toast
+    onUpdated?.(updatedTask)
     toast({
       title: "Task updated",
       description: "Your changes have been saved successfully.",

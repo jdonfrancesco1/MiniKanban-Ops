@@ -22,7 +22,6 @@ import {
   subscribeToBoardMembers,
   updateUserPresence,
 } from "@/lib/chat-service"
-import type { Timestamp } from "firebase/firestore"
 
 type BoardChatProps = {
   boardId: string
@@ -52,8 +51,8 @@ export function BoardChat({ boardId }: BoardChatProps) {
       setMessages(
         updatedMessages.sort((a, b) => {
           // Sort by timestamp (oldest first)
-          const aTime = a.timestamp?.toMillis() || 0
-          const bTime = b.timestamp?.toMillis() || 0
+          const aTime = a.timestamp instanceof Date ? a.timestamp.getTime() : new Date(a.timestamp).getTime()
+          const bTime = b.timestamp instanceof Date ? b.timestamp.getTime() : new Date(b.timestamp).getTime()
           return aTime - bTime
         }),
       )
@@ -120,10 +119,10 @@ export function BoardChat({ boardId }: BoardChatProps) {
       .substring(0, 2)
   }
 
-  const formatTime = (timestamp: Timestamp) => {
+  const formatTime = (timestamp?: Date | string) => {
     if (!timestamp) return ""
 
-    const date = timestamp.toDate()
+    const date = timestamp instanceof Date ? timestamp : new Date(timestamp)
     return new Intl.DateTimeFormat("en-US", {
       hour: "numeric",
       minute: "numeric",
@@ -145,11 +144,11 @@ export function BoardChat({ boardId }: BoardChatProps) {
     }
   }
 
-  const isActiveRecently = (lastActive?: Timestamp) => {
+  const isActiveRecently = (lastActive?: Date | string) => {
     if (!lastActive) return false
 
     const now = new Date()
-    const lastActiveDate = lastActive.toDate()
+    const lastActiveDate = lastActive instanceof Date ? lastActive : new Date(lastActive)
     const diffMinutes = (now.getTime() - lastActiveDate.getTime()) / (1000 * 60)
 
     return diffMinutes < 5 // Active in the last 5 minutes
