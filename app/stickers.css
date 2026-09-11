@@ -1,0 +1,160 @@
+/* Sticker styles */
+.sticker-container {
+  position: relative;
+  pointer-events: none;
+}
+
+.sticker-item {
+  position: absolute;
+  pointer-events: auto;
+  cursor: grab;
+  user-select: none;
+  transition: transform 0.1s ease;
+}
+
+.sticker-item:active {
+  cursor: grabbing;
+}
+
+.sticker-remove {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background-color: hsl(var(--destructive));
+  color: hsl(var(--destructive-foreground));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.sticker-item:hover .sticker-remove,
+.sticker-item:focus .sticker-remove {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .sticker-remove {
+    opacity: 1;
+    width: 20px;
+    height: 20px;
+  }
+}
+
+/* Sticker animations */
+@keyframes sticker-pop {
+  0% {
+    transform: translate(-50%, -50%) scale(0.8);
+    opacity: 0;
+  }
+  70% {
+    transform: translate(-50%, -50%) scale(1.1);
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 1;
+  }
+}
+
+.sticker-pop {
+  animation: sticker-pop 0.3s ease-out forwards;
+}
+
+/* Sticker hover effects */
+.sticker-hover {
+  transition: transform 0.2s ease;
+}
+
+.sticker-hover:hover {
+  transform: translate(-50%, -50%) scale(1.1) !important;
+}
+
+/* Sticker drag indicator */
+.sticker-dragging {
+  opacity: 0.8;
+  filter: drop-shadow(0 0 5px rgba(255, 255, 255, 0.5));
+}
+
+/* Sticker placement indicator */
+.sticker-placement-indicator {
+  position: absolute;
+  pointer-events: none;
+  z-index: 1000;
+  transform: translate(-50%, -50%);
+  transition: all 0.1s ease;
+}
+
+/* Sticker in rich text */
+.rich-text-sticker {
+  display: inline-block;
+  vertical-align: middle;
+  margin: 0 2px;
+}
+
+/* Sticker panel styles */
+.sticker-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+  gap: 8px;
+}
+
+.sticker-item-selectable {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 8px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.sticker-item-selectable:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.sticker-item-selectable img {
+  width: 40px;
+  height: 40px;
+  object-fit: contain;
+}
+
+.sticker-item-selectable .sticker-name {
+  margin-top: 4px;
+  font-size: 12px;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+/* Sticker floating button */
+.sticker-floating-button {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background-color: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  cursor: pointer;
+  z-index: 50;
+  transition: all 0.2s ease;
+}
+
+.sticker-floating-button:hover {
+  transform: scale(1.05);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
+}
+
+/* Ensure stickers have transparent backgrounds */
+.sticker-item img,
+.sticker-placement-indicator img {
+  background-color: transparent !important;
+}

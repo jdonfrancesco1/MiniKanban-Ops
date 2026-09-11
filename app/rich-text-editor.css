@@ -1,0 +1,30 @@
+[contenteditable="true"]:empty:before {
+  content: attr(data-placeholder);
+  color: hsl(var(--muted-foreground));
+  pointer-events: none;
+}
+
+[contenteditable="true"]:focus {
+  outline: none;
+}
+
+.rich-text-content {
+  min-height: 1em;
+}
+
+/* Indentation classes */
+.ml-0 {
+  margin-left: 0;
+}
+
+.ml-4 {
+  margin-left: 1rem;
+}
+
+.ml-8 {
+  margin-left: 2rem;
+}
+
+.ml-12 {
+  margin-left: 3rem;
+}
