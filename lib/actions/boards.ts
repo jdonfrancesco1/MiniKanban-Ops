@@ -305,6 +305,12 @@ export async function ensureDefaultBoard(): Promise<Board> {
     if (canonical.slug !== DEFAULT_BOARD_SLUG) {
       await stampOpsSlug(canonical.id)
     }
+    if (canonical.title.trim().toLowerCase() !== DEFAULT_BOARD_TITLE.toLowerCase()) {
+      await db
+        .update(boards)
+        .set({ title: DEFAULT_BOARD_TITLE, updatedAt: now() })
+        .where(eq(boards.id, canonical.id))
+    }
     await reconcileOpsTasks(canonical.id)
     const board = await loadBoard(canonical.id)
     if (board) return toPlainBoard(board)
