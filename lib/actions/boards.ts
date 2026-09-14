@@ -173,7 +173,6 @@ async function loadBoard(boardId: string): Promise<Board | null> {
 }
 
 async function insertOpsColumns(boardId: string) {
-  if (OPS_COLUMN_TITLES.length === 0) return
   await db.insert(columns).values(
     OPS_COLUMN_TITLES.map((title, order) => ({
       boardId,
