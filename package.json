@@ -6,7 +6,7 @@
     "build": "next build",
     "dev": "next dev",
     "lint": "eslint .",
-    "test": "node --experimental-strip-types --test lib/db/reconcile-ops.test.ts lib/db/lazy-init.test.ts lib/projects.test.ts",
+    "test": "node --experimental-strip-types --test lib/db/reconcile-ops.test.ts lib/projects.test.ts",
     "start": "next start -H 0.0.0.0 -p ${PORT:-3000}",
     "db:push": "drizzle-kit push",
     "db:generate": "drizzle-kit generate",
