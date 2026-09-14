@@ -18,6 +18,8 @@ import { updateTask, type Task } from "@/lib/db-service"
 import dynamic from "next/dynamic"
 import "react-quill/dist/quill.snow.css"
 import { Badge } from "@/components/ui/badge"
+import { matchOpsProject, upsertProjectLabel } from "@/lib/projects"
+import { ProjectPicker } from "@/components/project-chip"
 import { renderBlocksToHtml, type RichTextBlock } from "@/components/rich-text-editor"
 
 const ReactQuill = dynamic(() => import("react-quill"), {
@@ -189,6 +191,15 @@ export function TaskEditModal({ open, onOpenChange, task, boardId, columnId, onS
                 />
               )}
             </div>
+          </div>
+
+          <div className="grid gap-2">
+            <Label className="dark:text-neutral-300">Project</Label>
+            <ProjectPicker
+              value={labels.map((label) => matchOpsProject(label)).find(Boolean) ?? null}
+              onChange={(project) => setLabels(upsertProjectLabel(labels, project))}
+              disabled={isLoading}
+            />
           </div>
 
           <div className="grid gap-2">

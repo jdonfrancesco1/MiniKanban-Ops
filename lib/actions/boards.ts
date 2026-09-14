@@ -1,6 +1,6 @@
 "use server"
 
-import { and, asc, eq, isNotNull, isNull, sql } from "drizzle-orm"
+import { and, asc, eq, isNotNull, isNull, ne, sql } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { boards, columns, tasks, type ColumnRow, type TaskRow } from "@/lib/db/schema"
 import {
@@ -9,6 +9,12 @@ import {
   DEFAULT_BOARD_TITLE,
   OPS_COLUMN_TITLES,
 } from "@/lib/db/ops-defaults"
+import {
+  isTaskHiddenAsArchived,
+  missingOpsColumnTitles,
+  pickCanonicalOpsBoard,
+  planOpsTaskPlacements,
+} from "@/lib/db/reconcile-ops"
 import { requireOpsSession } from "@/lib/auth/session"
 import type { Board, BoardSummary, Column, Task } from "@/lib/types"
 
@@ -21,27 +27,50 @@ function toIso(value: Date | string | null | undefined) {
   return value instanceof Date ? value.toISOString() : new Date(value).toISOString()
 }
 
+function asDate(value: Date | string | null | undefined) {
+  if (!value) return null
+  return value instanceof Date ? value : new Date(value)
+}
+
+function mapLabels(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value.filter((label): label is string => typeof label === "string" && label.trim().length > 0)
+  }
+  if (typeof value === "string" && value.trim()) {
+    try {
+      return mapLabels(JSON.parse(value))
+    } catch {
+      return [value]
+    }
+  }
+  return []
+}
+
+function toPlainBoard(board: Board): Board {
+  return JSON.parse(JSON.stringify(board)) as Board
+}
+
 function mapTask(row: TaskRow): Task {
+  const archivedAt = asDate(row.archivedAt)
+  const hidden = isTaskHiddenAsArchived(row.archivedAt, row.createdAt)
   return {
-    id: row.id,
+    id: String(row.id),
     title: row.title,
     description: row.description ?? "",
-    labels: Array.isArray(row.labels) ? row.labels : [],
+    labels: mapLabels(row.labels),
     stickers: [],
     createdAt: toIso(row.createdAt),
     updatedAt: toIso(row.updatedAt),
     createdBy: "ops",
-    archivedAt: row.archivedAt ? row.archivedAt.getTime() : undefined,
-    columnId: row.columnId,
-    boardId: row.boardId,
+    archivedAt: hidden && archivedAt ? archivedAt.getTime() : undefined,
+    columnId: String(row.columnId),
+    boardId: String(row.boardId),
     order: row.order,
   }
 }
 
 async function loadBoard(boardId: string): Promise<Board | null> {
-  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-    boardId,
-  )
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(boardId)
 
   const [board] = await db
     .select()
@@ -63,34 +92,77 @@ async function loadBoard(boardId: string): Promise<Board | null> {
     .where(eq(tasks.boardId, board.id))
     .orderBy(asc(tasks.order), asc(tasks.createdAt))
 
+  const columnIds = new Set(columnRows.map((column) => String(column.id)))
+  const fallbackColumnId = columnRows[0] ? String(columnRows[0].id) : null
   const activeByColumn = new Map<string, Task[]>()
   const archivedTasks: Task[] = []
+  const orphaned: TaskRow[] = []
 
   for (const row of taskRows) {
     const mapped = mapTask(row)
-    if (row.archivedAt) {
+    if (isTaskHiddenAsArchived(row.archivedAt, row.createdAt)) {
       archivedTasks.push(mapped)
       continue
     }
-    const list = activeByColumn.get(row.columnId) ?? []
+    const columnId = String(row.columnId)
+    if (!columnIds.has(columnId)) {
+      orphaned.push(row)
+      continue
+    }
+    const list = activeByColumn.get(columnId) ?? []
     list.push(mapped)
-    activeByColumn.set(row.columnId, list)
+    activeByColumn.set(columnId, list)
   }
 
-  const mappedColumns: Column[] = columnRows.map((column: ColumnRow) => ({
-    id: column.id,
-    title: column.title,
-    order: column.order,
-    tasks: activeByColumn.get(column.id) ?? [],
-    stickers: [],
-  }))
+  if (fallbackColumnId && orphaned.length > 0) {
+    const startOrder = activeByColumn.get(fallbackColumnId)?.length ?? 0
+    for (const [index, row] of orphaned.entries()) {
+      await db
+        .update(tasks)
+        .set({ columnId: fallbackColumnId, updatedAt: now() })
+        .where(eq(tasks.id, row.id))
+      const remapped = mapTask({ ...row, columnId: fallbackColumnId })
+      remapped.columnId = fallbackColumnId
+      remapped.order = startOrder + index
+      const list = activeByColumn.get(fallbackColumnId) ?? []
+      list.push(remapped)
+      activeByColumn.set(fallbackColumnId, list)
+    }
+    console.info("[ops] rehomed orphaned tasks", {
+      boardId: board.id,
+      count: orphaned.length,
+      columnId: fallbackColumnId,
+    })
+  }
+
+  const mappedColumns: Column[] = columnRows.map((column: ColumnRow) => {
+    const columnId = String(column.id)
+    return {
+      id: columnId,
+      title: column.title,
+      order: column.order,
+      tasks: activeByColumn.get(columnId) ?? [],
+      stickers: [],
+    }
+  })
+
+  const activeTasks = mappedColumns.flatMap((column) => column.tasks)
+  console.info("[ops] loaded board", {
+    id: board.id,
+    slug: board.slug,
+    title: board.title,
+    columns: mappedColumns.length,
+    tasks: activeTasks.length,
+    archived: archivedTasks.length,
+  })
 
   return {
-    id: board.id,
+    id: String(board.id),
     title: board.title,
     description: board.description ?? "",
     slug: board.slug,
     columns: mappedColumns,
+    activeTasks,
     createdAt: toIso(board.createdAt) ?? new Date().toISOString(),
     updatedAt: toIso(board.updatedAt) ?? new Date().toISOString(),
     createdBy: "ops",
@@ -111,6 +183,97 @@ async function insertOpsColumns(boardId: string) {
   )
 }
 
+async function ensureOpsColumns(boardId: string) {
+  const existing = await db
+    .select()
+    .from(columns)
+    .where(eq(columns.boardId, boardId))
+    .orderBy(asc(columns.order), asc(columns.createdAt))
+
+  const missing = missingOpsColumnTitles(existing.map((column) => column.title))
+  if (missing.length === 0) return existing
+
+  const nextOrder = existing.length === 0 ? 0 : existing[existing.length - 1].order + 1
+  await db.insert(columns).values(
+    missing.map((title, index) => ({
+      boardId,
+      title,
+      order: nextOrder + index,
+    })),
+  )
+  return db
+    .select()
+    .from(columns)
+    .where(eq(columns.boardId, boardId))
+    .orderBy(asc(columns.order), asc(columns.createdAt))
+}
+
+async function stampOpsSlug(boardId: string) {
+  await db
+    .update(boards)
+    .set({ slug: null, updatedAt: now() })
+    .where(and(eq(boards.slug, DEFAULT_BOARD_SLUG), ne(boards.id, boardId)))
+  await db
+    .update(boards)
+    .set({ slug: DEFAULT_BOARD_SLUG, updatedAt: now() })
+    .where(eq(boards.id, boardId))
+}
+
+async function reconcileOpsTasks(opsBoardId: string) {
+  const opsColumns = await ensureOpsColumns(opsBoardId)
+  const allColumns = await db.select().from(columns)
+  const allTasks = await db.select().from(tasks)
+
+  const visibleOnOps = allTasks.filter(
+    (task) => task.boardId === opsBoardId && !isTaskHiddenAsArchived(task.archivedAt, task.createdAt),
+  ).length
+
+  const placements = planOpsTaskPlacements({
+    opsBoardId,
+    opsColumns: opsColumns.map((column) => ({
+      id: String(column.id),
+      title: column.title,
+      boardId: String(column.boardId),
+      order: column.order,
+    })),
+    columns: allColumns.map((column) => ({
+      id: String(column.id),
+      title: column.title,
+      boardId: String(column.boardId),
+      order: column.order,
+    })),
+    tasks: allTasks.map((task) => ({
+      id: String(task.id),
+      boardId: String(task.boardId),
+      columnId: String(task.columnId),
+      archivedAt: task.archivedAt,
+      createdAt: task.createdAt,
+    })),
+    adoptForeignTasks: visibleOnOps === 0,
+  })
+
+  for (const placement of placements) {
+    await db
+      .update(tasks)
+      .set({
+        boardId: placement.boardId,
+        columnId: placement.columnId,
+        ...(placement.clearArchive ? { archivedAt: null } : {}),
+        updatedAt: now(),
+      })
+      .where(eq(tasks.id, placement.taskId))
+  }
+
+  if (placements.length > 0) {
+    await touchBoard(opsBoardId)
+    console.info("[ops] reconciled tasks onto ops board", {
+      boardId: opsBoardId,
+      repaired: placements.length,
+      adopted: visibleOnOps === 0,
+    })
+  }
+}
+
 async function touchBoard(boardId: string) {
   await db.update(boards).set({ updatedAt: now() }).where(eq(boards.id, boardId))
 }
@@ -118,10 +281,39 @@ async function touchBoard(boardId: string) {
 export async function ensureDefaultBoard(): Promise<Board> {
   await requireOpsSession()
 
-  const [existing] = await db.select().from(boards).where(eq(boards.slug, DEFAULT_BOARD_SLUG)).limit(1)
-  if (existing) {
-    const board = await loadBoard(existing.id)
-    if (board) return board
+  const boardRows = await db.select().from(boards)
+  const counts = await db
+    .select({
+      boardId: tasks.boardId,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(tasks)
+    .groupBy(tasks.boardId)
+  const countByBoard = new Map(counts.map((row) => [String(row.boardId), Number(row.count)]))
+
+  const canonical = pickCanonicalOpsBoard(
+    boardRows.map((board) => ({
+      id: String(board.id),
+      title: board.title,
+      slug: board.slug,
+      updatedAt: board.updatedAt,
+      taskCount: countByBoard.get(String(board.id)) ?? 0,
+    })),
+  )
+
+  if (canonical) {
+    if (canonical.slug !== DEFAULT_BOARD_SLUG) {
+      await stampOpsSlug(canonical.id)
+    }
+    if (canonical.title.trim().toLowerCase() !== DEFAULT_BOARD_TITLE.toLowerCase()) {
+      await db
+        .update(boards)
+        .set({ title: DEFAULT_BOARD_TITLE, updatedAt: now() })
+        .where(eq(boards.id, canonical.id))
+    }
+    await reconcileOpsTasks(canonical.id)
+    const board = await loadBoard(canonical.id)
+    if (board) return toPlainBoard(board)
   }
 
   const [created] = await db
@@ -134,11 +326,12 @@ export async function ensureDefaultBoard(): Promise<Board> {
     .returning()
 
   await insertOpsColumns(created.id)
+  await reconcileOpsTasks(created.id)
   const board = await loadBoard(created.id)
   if (!board) {
     throw new Error("Failed to create the default ops board")
   }
-  return board
+  return toPlainBoard(board)
 }
 
 export async function getBoard(boardId: string): Promise<Board> {
@@ -152,7 +345,10 @@ export async function getBoard(boardId: string): Promise<Board> {
   if (!board) {
     throw new Error("Board not found")
   }
-  return board
+  if (board.slug === DEFAULT_BOARD_SLUG) {
+    return ensureDefaultBoard()
+  }
+  return toPlainBoard(board)
 }
 
 export async function getUserBoards(): Promise<BoardSummary[]> {

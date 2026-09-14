@@ -20,6 +20,7 @@ import {
 import type { Column, Task } from "@/lib/types"
 import { cn } from "@/lib/utils"
 import { KanbanCard } from "./kanban-card"
+import { ProjectPicker } from "./project-chip"
 
 type KanbanColumnProps = {
   dndId: string
@@ -30,7 +31,7 @@ type KanbanColumnProps = {
   className?: string
   onDeleteColumn?: (columnId: string, columnTitle: string) => void
   onRenameColumn?: (columnId: string, title: string) => Promise<void> | void
-  onAddTask?: (columnId: string, title: string) => Promise<void> | void
+  onAddTask?: (columnId: string, title: string, labels?: string[]) => Promise<void> | void
   onTaskDelete?: (columnId: string, taskId: string) => Promise<void> | void
   onTaskUpdate?: (task: Task) => void
 }
@@ -53,6 +54,7 @@ export function KanbanColumn({
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [newTaskTitle, setNewTaskTitle] = useState("")
+  const [newTaskProject, setNewTaskProject] = useState<string | null>(null)
   const [isAddingTask, setIsAddingTask] = useState(false)
 
   const { attributes, listeners, setNodeRef, transform, transition, isDragging: isColumnDragging } = useSortable({
@@ -94,8 +96,9 @@ export function KanbanColumn({
     if (!newTaskTitle.trim()) return
     setIsLoading(true)
     try {
-      await onAddTask?.(column.id, newTaskTitle.trim())
+      await onAddTask?.(column.id, newTaskTitle.trim(), newTaskProject ? [newTaskProject] : [])
       setNewTaskTitle("")
+      setNewTaskProject(null)
       setIsAddingTask(false)
     } finally {
       setIsLoading(false)
@@ -179,6 +182,7 @@ export function KanbanColumn({
 
           {isAddingTask ? (
             <div className="space-y-2">
+              <ProjectPicker value={newTaskProject} onChange={setNewTaskProject} disabled={isLoading} />
               <Input
                 value={newTaskTitle}
                 onChange={(event) => setNewTaskTitle(event.target.value)}
@@ -189,6 +193,7 @@ export function KanbanColumn({
                   if (event.key === "Enter") void handleAddTask()
                   if (event.key === "Escape") {
                     setNewTaskTitle("")
+                    setNewTaskProject(null)
                     setIsAddingTask(false)
                   }
                 }}
