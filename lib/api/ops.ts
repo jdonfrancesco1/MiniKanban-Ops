@@ -7,34 +7,15 @@ import {
   updateTask,
 } from "@/lib/actions/boards"
 import { requireOpsSession } from "@/lib/auth/session"
+import { fingerprintProcessDatabase } from "@/lib/db/fingerprint"
 import { OPS_COLUMN_TITLES } from "@/lib/db/ops-defaults"
+import type { OpsApiBoard, OpsApiTask, OpsBoardDiagnostics } from "@/lib/ops-board"
 import { getTaskProject, upsertProjectLabel } from "@/lib/projects"
-import type { Board, Column, Task } from "@/lib/types"
+import { extractTasksFromBoard, type Board, type Column, type Task } from "@/lib/types"
 
 export const DEFAULT_OPS_COLUMN_TITLE = OPS_COLUMN_TITLES[0]
 
-export type OpsApiTask = {
-  id: string
-  title: string
-  description: string
-  labels: string[]
-  order: number
-  columnId: string
-}
-
-export type OpsApiColumn = {
-  id: string
-  title: string
-  order: number
-  tasks: OpsApiTask[]
-}
-
-export type OpsApiBoard = {
-  id: string
-  title: string
-  slug: string | null
-  columns: OpsApiColumn[]
-}
+export type { OpsApiBoard, OpsApiColumn, OpsApiTask, OpsBoardDiagnostics } from "@/lib/ops-board"
 
 export function serializeOpsTask(task: Task): OpsApiTask {
   return {
@@ -48,16 +29,34 @@ export function serializeOpsTask(task: Task): OpsApiTask {
 }
 
 export function serializeOpsBoard(board: Board): OpsApiBoard {
+  const columns = board.columns.map((column) => ({
+    id: column.id,
+    title: column.title,
+    order: column.order,
+    tasks: (column.tasks || []).map((task) =>
+      serializeOpsTask({ ...task, columnId: task.columnId || column.id }),
+    ),
+  }))
+  const nestedTasks = columns.flatMap((column) => column.tasks)
+  const fallbackTasks = extractTasksFromBoard(board).map(serializeOpsTask)
+  const activeTasks = nestedTasks.length > 0 ? nestedTasks : fallbackTasks
   return {
     id: board.id,
     title: board.title,
     slug: board.slug ?? null,
-    columns: board.columns.map((column) => ({
-      id: column.id,
-      title: column.title,
-      order: column.order,
-      tasks: column.tasks.map(serializeOpsTask),
-    })),
+    columns,
+    activeTasks,
+  }
+}
+
+export function buildOpsDiagnostics(board: Board): OpsBoardDiagnostics {
+  const fingerprint = fingerprintProcessDatabase()
+  return {
+    taskCount: extractTasksFromBoard(board).length,
+    boardId: board.id,
+    boardSlug: board.slug ?? null,
+    dbHostSuffix: fingerprint.dbHostSuffix,
+    dbName: fingerprint.dbName,
   }
 }
 
@@ -104,7 +103,16 @@ export function findOpsColumn(
 export async function getOpsBoardPayload() {
   await requireOpsApi()
   const board = await ensureDefaultBoard()
-  return { board: serializeOpsBoard(board) }
+  return {
+    board: serializeOpsBoard(board),
+    diagnostics: buildOpsDiagnostics(board),
+  }
+}
+
+export async function getOpsDiagnosticsPayload() {
+  await requireOpsApi()
+  const board = await ensureDefaultBoard()
+  return { diagnostics: buildOpsDiagnostics(board) }
 }
 
 export async function createOpsTask(input: { title: string; columnTitle?: string; labels?: string[] }) {

@@ -97,12 +97,12 @@ export function KanbanBoard({
 
     if (overData?.type === "task") {
       newColumnId = String(overData.columnId)
-      const destTasks = currentTasks.filter((task) => task.columnId === newColumnId && task.id !== active.id)
+      const destTasks = currentTasks.filter((task) => String(task.columnId) === newColumnId && task.id !== active.id)
       const overIndex = destTasks.findIndex((task) => task.id === over.id)
       newPosition = overIndex >= 0 ? overIndex : destTasks.length
     } else if (overData?.type === "column" || columnIds.includes(String(over.id))) {
       newColumnId = String(over.id)
-      newPosition = currentTasks.filter((task) => task.columnId === newColumnId && task.id !== active.id).length
+      newPosition = currentTasks.filter((task) => String(task.columnId) === newColumnId && task.id !== active.id).length
     }
 
     onTaskMove(String(active.id), newColumnId, newPosition, oldColumnId)
@@ -120,7 +120,7 @@ export function KanbanBoard({
           <div className="flex gap-4 p-4 h-full overflow-x-auto">
             {currentColumns.map((column) => {
               const columnTasks = currentTasks
-                .filter((task) => task.columnId === column.id)
+                .filter((task) => String(task.columnId) === String(column.id))
                 .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
 
               return (
