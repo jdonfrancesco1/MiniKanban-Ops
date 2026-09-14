@@ -8,6 +8,7 @@ import {
 } from "@/lib/actions/boards"
 import { requireOpsSession } from "@/lib/auth/session"
 import { OPS_COLUMN_TITLES } from "@/lib/db/ops-defaults"
+import { getTaskProject, upsertProjectLabel } from "@/lib/projects"
 import type { Board, Column, Task } from "@/lib/types"
 
 export const DEFAULT_OPS_COLUMN_TITLE = OPS_COLUMN_TITLES[0]
@@ -16,6 +17,7 @@ export type OpsApiTask = {
   id: string
   title: string
   description: string
+  labels: string[]
   order: number
   columnId: string
 }
@@ -39,6 +41,7 @@ export function serializeOpsTask(task: Task): OpsApiTask {
     id: task.id,
     title: task.title,
     description: task.description ?? "",
+    labels: Array.isArray(task.labels) ? task.labels : [],
     order: task.order ?? 0,
     columnId: task.columnId ?? "",
   }
@@ -104,7 +107,7 @@ export async function getOpsBoardPayload() {
   return { board: serializeOpsBoard(board) }
 }
 
-export async function createOpsTask(input: { title: string; columnTitle?: string }) {
+export async function createOpsTask(input: { title: string; columnTitle?: string; labels?: string[] }) {
   await requireOpsApi()
   const title = input.title.trim()
   if (!title) {
@@ -119,10 +122,13 @@ export async function createOpsTask(input: { title: string; columnTitle?: string
     throw new Error("Column not found")
   }
 
+  const inferred = getTaskProject({ title, labels: input.labels })
+  const labels = inferred ? upsertProjectLabel(input.labels ?? [], inferred.project) : input.labels ?? []
+
   const task = await addTask(board.id, column.id, {
     title,
     description: "",
-    labels: [],
+    labels,
     columnId: column.id,
     boardId: board.id,
   })

@@ -1,0 +1,54 @@
+"use client"
+
+import { Badge } from "@/components/ui/badge"
+import { OPS_PROJECTS, projectChipClass } from "@/lib/projects"
+import { cn } from "@/lib/utils"
+
+export function ProjectChip({
+  project,
+  className,
+}: {
+  project: string
+  className?: string
+}) {
+  return (
+    <Badge
+      variant="secondary"
+      className={cn("text-[10px] font-semibold uppercase tracking-wide border", projectChipClass(project), className)}
+    >
+      {project}
+    </Badge>
+  )
+}
+
+export function ProjectPicker({
+  value,
+  onChange,
+  disabled = false,
+}: {
+  value: string | null
+  onChange: (project: string | null) => void
+  disabled?: boolean
+}) {
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {OPS_PROJECTS.map((project) => {
+        const selected = value === project
+        return (
+          <button
+            key={project}
+            type="button"
+            disabled={disabled}
+            onClick={() => onChange(selected ? null : project)}
+            className={cn(
+              "rounded-full border px-2 py-0.5 text-[11px] font-medium transition-colors",
+              selected ? projectChipClass(project) : "border-white/15 bg-white/5 text-white/70 hover:bg-white/10 hover:text-white",
+            )}
+          >
+            {project}
+          </button>
+        )
+      })}
+    </div>
+  )
+}

@@ -20,8 +20,10 @@ import {
 import { useToast } from "@/hooks/use-toast"
 import { useUndo } from "@/hooks/use-undo"
 import { deleteTask, type Task } from "@/lib/db-service"
+import { getTaskProject } from "@/lib/projects"
 import { cn } from "@/lib/utils"
 import { FormattedDescription } from "./formatted-description"
+import { ProjectChip } from "./project-chip"
 import { TaskEditModal } from "./task-edit-modal"
 import { StickerLayer } from "./sticker-layer"
 import { useMobile } from "@/hooks/use-mobile"
@@ -91,8 +93,9 @@ export function KanbanCard({
     scale: isDragging ? 1.02 : 1,
   }
 
-  // Check if the description is HTML content
   const hasDescription = !!task.description && task.description.trim() !== ""
+  const project = getTaskProject(task)
+  const extraLabels = (task.labels || []).filter((label) => label !== project?.project)
 
   // Handle delete task
   const handleDeleteTask = async () => {
@@ -222,7 +225,12 @@ export function KanbanCard({
                   {/* Show GripVertical icon to indicate dragging handle */}
                   <GripVertical className="h-4 w-4" />
                 </div>
-                <h4 className="text-sm font-medium leading-tight flex-1 text-white">{task.title}</h4>
+                <div className="flex-1 min-w-0 space-y-1.5">
+                  {project ? <ProjectChip project={project.project} /> : null}
+                  <h4 className="text-sm font-medium leading-tight text-white">
+                    {project?.displayTitle || task.title}
+                  </h4>
+                </div>
               </div>
             </div>
 
@@ -242,14 +250,14 @@ export function KanbanCard({
               </div>
             )}
 
-            {task.labels && task.labels.length > 0 && (
+            {extraLabels.length > 0 && (
               <div className="flex flex-wrap gap-1 ml-6">
-                {task.labels.map((label, index) => (
+                {extraLabels.map((label, index) => (
                   <Badge
                     key={index}
                     variant="secondary"
                     className="text-xs bg-white/20 text-white hover:bg-white/30"
-                    onClick={(e) => e.stopPropagation()} // Prevent drag when clicking on labels
+                    onClick={(e) => e.stopPropagation()}
                   >
                     {label}
                   </Badge>

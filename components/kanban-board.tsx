@@ -132,7 +132,9 @@ export function KanbanBoard({
                   tasks={columnTasks}
                   onDeleteColumn={() => onColumnDelete(column.id)}
                   onRenameColumn={(columnId, title) => onColumnUpdate(columnId, title)}
-                  onAddTask={(columnId, title) => onTaskAdd({ title, description: "", labels: [] }, columnId)}
+                  onAddTask={(columnId, title, labels) =>
+                    onTaskAdd({ title, description: "", labels: labels ?? [] }, columnId)
+                  }
                   onTaskDelete={(columnId, taskId) => onTaskDelete(taskId, columnId)}
                   onTaskUpdate={onTaskUpdate}
                 />

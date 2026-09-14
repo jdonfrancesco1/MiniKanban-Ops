@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
-import Link from "next/link"
 import KanbanBoardComponent from "@/components/kanban-board"
 import { useUndoContext } from "@/contexts/undo-context"
 import { useAuthContext } from "@/contexts/auth-context"
@@ -30,13 +29,36 @@ export default function BoardPage() {
   const [tasks, setTasks] = useState<Task[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
+  const applyBoard = useCallback((boardData: Board) => {
+    setBoard(boardData)
+    setColumns(boardData.columns || [])
+    setTasks(extractTasksFromBoard(boardData))
+  }, [])
+
   const loadBoardData = useCallback(async () => {
     try {
       setIsLoading(true)
-      const boardData = await DBService.getBoard(boardId)
-      setBoard(boardData)
-      setColumns(boardData.columns || [])
-      setTasks(extractTasksFromBoard(boardData))
+      let boardData = await DBService.getBoard(boardId)
+      let extracted = extractTasksFromBoard(boardData)
+
+      // JSON API avoids Next.js server-action Flight dropping nested column.tasks
+      if (extracted.length === 0 && (boardId === "ops" || boardData.slug === "ops")) {
+        const response = await fetch("/api/ops/board", { cache: "no-store" })
+        if (response.ok) {
+          const payload = (await response.json()) as { board?: Board }
+          if (payload.board?.columns?.length) {
+            boardData = {
+              ...boardData,
+              ...payload.board,
+              columns: payload.board.columns,
+              activeTasks: extractTasksFromBoard(payload.board),
+            }
+            extracted = extractTasksFromBoard(boardData)
+          }
+        }
+      }
+
+      applyBoard({ ...boardData, activeTasks: boardData.activeTasks ?? extracted })
       clearUndoAction()
       if (boardData.slug === "ops" && boardId !== "ops" && boardId !== boardData.id) {
         router.replace(`/boards/${boardData.id}`)
@@ -48,7 +70,7 @@ export default function BoardPage() {
     } finally {
       setIsLoading(false)
     }
-  }, [boardId, router, clearUndoAction, toast])
+  }, [applyBoard, boardId, router, clearUndoAction, toast])
 
   useEffect(() => {
     if (!authLoading && user) {
@@ -167,9 +189,6 @@ export default function BoardPage() {
           </h1>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" className="border-white/20 text-white hover:bg-white/10" asChild>
-            <Link href="/boards">All boards</Link>
-          </Button>
           <Button variant="ghost" className="text-white/70 hover:text-white hover:bg-white/10" onClick={() => void logout()}>
             <LogOut className="h-4 w-4 mr-2" />
             Sign out

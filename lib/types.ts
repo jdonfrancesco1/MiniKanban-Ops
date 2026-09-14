@@ -40,6 +40,8 @@ export type Board = {
   description?: string
   slug?: string | null
   columns: Column[]
+  /** Flat active cards. Prefer this if nested `column.tasks` is missing after serialization. */
+  activeTasks?: Task[]
   createdAt: string
   updatedAt: string
   createdBy: string
@@ -57,13 +59,21 @@ export type BoardSummary = {
 }
 
 export function extractTasksFromBoard(board: Board): Task[] {
-  if (!board?.columns) return []
-  return board.columns.reduce((acc, column) => {
-    const tasksWithContext = (column.tasks || []).map((task) => ({
-      ...task,
-      columnId: column.id,
-      boardId: board.id,
-    }))
-    return acc.concat(tasksWithContext)
-  }, [] as Task[])
+  const fromColumns =
+    board?.columns?.reduce((acc, column) => {
+      const tasksWithContext = (column.tasks || []).map((task) => ({
+        ...task,
+        columnId: String(task.columnId || column.id),
+        boardId: String(task.boardId || board.id),
+      }))
+      return acc.concat(tasksWithContext)
+    }, [] as Task[]) ?? []
+
+  if (fromColumns.length > 0) return fromColumns
+
+  return (board.activeTasks || []).map((task) => ({
+    ...task,
+    columnId: String(task.columnId || ""),
+    boardId: String(task.boardId || board.id),
+  }))
 }
