@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server"
 import { opsApiError, patchOpsTask } from "@/lib/api/ops"
 
+export const dynamic = "force-dynamic"
+
 type RouteContext = { params: Promise<{ id: string }> }
 
 export async function PATCH(request: Request, context: RouteContext) {
