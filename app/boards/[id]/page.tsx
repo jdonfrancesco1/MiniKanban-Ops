@@ -209,7 +209,7 @@ export default function BoardPage() {
           </h1>
           {diagnostics ? (
             <p
-              className={`text-[11px] mt-1 ${diagnostics.taskCount === 0 ? "text-amber-300/90" : "text-white/40"}`}
+              className={`text-[11px] mt-1 max-w-xl leading-snug ${diagnostics.taskCount === 0 ? "text-amber-300/90" : "text-white/40"}`}
               data-testid="ops-db-fingerprint"
             >
               {diagnostics.taskCount} cards · db {diagnostics.dbHostSuffix} / {diagnostics.dbName}
