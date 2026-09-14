@@ -12,6 +12,13 @@ import {
   type Column,
   type Task,
 } from "@/lib/db-service"
+import {
+  hydrateOpsApiBoard,
+  pickBoardWithTasks,
+  shouldPreferOpsJsonApi,
+  type OpsApiBoardPayload,
+  type OpsBoardDiagnostics,
+} from "@/lib/ops-board"
 import { Button } from "@/components/ui/button"
 import { Loader2, LogOut } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
@@ -27,6 +34,7 @@ export default function BoardPage() {
   const [board, setBoard] = useState<Board | null>(null)
   const [columns, setColumns] = useState<Column[]>([])
   const [tasks, setTasks] = useState<Task[]>([])
+  const [diagnostics, setDiagnostics] = useState<OpsBoardDiagnostics | null>(null)
   const [isLoading, setIsLoading] = useState(true)
 
   const applyBoard = useCallback((boardData: Board) => {
@@ -35,33 +43,45 @@ export default function BoardPage() {
     setTasks(extractTasksFromBoard(boardData))
   }, [])
 
+  const fetchOpsJsonBoard = useCallback(async () => {
+    const response = await fetch("/api/ops/board", { cache: "no-store", credentials: "same-origin" })
+    if (!response.ok) return { board: null, diagnostics: null }
+    const payload = (await response.json()) as OpsApiBoardPayload
+    if (payload.diagnostics) setDiagnostics(payload.diagnostics)
+    if (!payload.board) return { board: null, diagnostics: payload.diagnostics ?? null }
+    return { board: hydrateOpsApiBoard(payload.board), diagnostics: payload.diagnostics ?? null }
+  }, [])
+
   const loadBoardData = useCallback(async () => {
     try {
       setIsLoading(true)
-      let boardData = await DBService.getBoard(boardId)
-      let extracted = extractTasksFromBoard(boardData)
+      let apiBoard: Board | null = null
+      let serverBoard: Board | null = null
 
-      // JSON API avoids Next.js server-action Flight dropping nested column.tasks
-      if (extracted.length === 0 && (boardId === "ops" || boardData.slug === "ops")) {
-        const response = await fetch("/api/ops/board", { cache: "no-store" })
-        if (response.ok) {
-          const payload = (await response.json()) as { board?: Board }
-          if (payload.board?.columns?.length) {
-            boardData = {
-              ...boardData,
-              ...payload.board,
-              columns: payload.board.columns,
-              activeTasks: extractTasksFromBoard(payload.board),
-            }
-            extracted = extractTasksFromBoard(boardData)
-          }
+      // JSON first for /boards/ops — Next server-action Flight still drops nested + flat task arrays.
+      if (shouldPreferOpsJsonApi(boardId)) {
+        const json = await fetchOpsJsonBoard()
+        apiBoard = json.board
+      }
+
+      const apiHasTasks = apiBoard ? extractTasksFromBoard(apiBoard).length > 0 : false
+      if (!apiHasTasks) {
+        serverBoard = await DBService.getBoard(boardId)
+        if (!apiBoard && shouldPreferOpsJsonApi(boardId, serverBoard.slug)) {
+          const json = await fetchOpsJsonBoard()
+          apiBoard = json.board
         }
       }
 
-      applyBoard({ ...boardData, activeTasks: boardData.activeTasks ?? extracted })
+      const picked = pickBoardWithTasks(apiBoard, serverBoard)
+      if (!picked.board) {
+        throw new Error("Board not found")
+      }
+
+      applyBoard(picked.board)
       clearUndoAction()
-      if (boardData.slug === "ops" && boardId !== "ops" && boardId !== boardData.id) {
-        router.replace(`/boards/${boardData.id}`)
+      if (picked.board.slug === "ops" && boardId !== "ops" && boardId !== picked.board.id) {
+        router.replace(`/boards/${picked.board.id}`)
       }
     } catch (error) {
       console.error("Error fetching board:", error)
@@ -70,7 +90,7 @@ export default function BoardPage() {
     } finally {
       setIsLoading(false)
     }
-  }, [applyBoard, boardId, router, clearUndoAction, toast])
+  }, [applyBoard, boardId, fetchOpsJsonBoard, router, clearUndoAction, toast])
 
   useEffect(() => {
     if (!authLoading && user) {
@@ -187,6 +207,17 @@ export default function BoardPage() {
           <h1 className="text-xl font-semibold truncate" title={board.title}>
             {board.title}
           </h1>
+          {diagnostics ? (
+            <p
+              className={`text-[11px] mt-1 max-w-xl leading-snug ${diagnostics.taskCount === 0 ? "text-amber-300/90" : "text-white/40"}`}
+              data-testid="ops-db-fingerprint"
+            >
+              {diagnostics.taskCount} cards · db {diagnostics.dbHostSuffix} / {diagnostics.dbName}
+              {diagnostics.taskCount === 0
+                ? " — if you expected Helium cards, set Autoscale Publish Secrets DATABASE_URL to the workspace URI (host helium, db heliumdb). Do not create a second board."
+                : ""}
+            </p>
+          ) : null}
         </div>
         <div className="flex items-center gap-2">
           <Button variant="ghost" className="text-white/70 hover:text-white hover:bg-white/10" onClick={() => void logout()}>

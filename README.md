@@ -29,14 +29,46 @@ Copy `.env.example` to `.env.local`:
 
 | Variable | Required | Purpose |
 | --- | --- | --- |
-| `DATABASE_URL` | Yes | Neon (or local Postgres) connection string |
+| `DATABASE_URL` | Yes | Postgres connection string (Replit Helium or Neon) |
 | `OPS_BOARD_SECRET` | Recommended in prod | Shared password. Sets an httpOnly session cookie. If omitted, the board is open. |
 
 Do not add `NEXT_PUBLIC_FIREBASE_*`. There is no Firebase.
 
+## Replit Publish / Autoscale secrets
+
+**Workspace Secrets and Autoscale Publish Secrets are separate.** Changing a secret in the Repl Shell / Tools → Secrets does **not** update the published Autoscale deployment until you copy it into Publish Secrets and republish.
+
+James’s live fleet is Replit Postgres:
+
+| Check | Expected |
+| --- | --- |
+| Host suffix | `helium` (not `neon.tech`) |
+| Database name | `heliumdb` |
+| Boards | One board, slug `ops` |
+| Do not | Create a second board, wipe, or reseed |
+
+### Exact check after Publish
+
+1. Replit → this Repl → **Publish** (Autoscale) → **Secrets** / environment variables.
+2. Open `DATABASE_URL`. It must be the **same** URI the workspace Shell uses (`echo $DATABASE_URL` → host `helium`, db `heliumdb`).
+3. If Publish `DATABASE_URL` is empty, missing, or a Neon URL (`*.neon.tech` / `neondb`), Autoscale runs `ensureDefaultBoard` against that other database and renders Need you / I'm on / Waiting / Done with **0 cards**. Chat/SSH against the workspace still sees the Helium cards.
+4. `OPS_BOARD_SECRET` must also match the workspace secret (same login box).
+5. Save Publish Secrets and **Publish again**. Then hard-refresh https://mini-kanban-ops.replit.app/boards/ops and sign in.
+6. The Ops header should show a non-secret fingerprint, e.g. `38 cards · db helium / heliumdb` (count is whatever is live). If it shows `0 cards · db neon.tech / …`, Autoscale is still on the wrong database — fix the Publish secret, do not add a second board.
+7. Optional session/API check:
+
+```bash
+curl -sS https://mini-kanban-ops.replit.app/api/ops/diagnostics \
+  -H "Authorization: Bearer $OPS_BOARD_SECRET"
+```
+
+Expect `diagnostics.taskCount` > 0, `dbHostSuffix` = `helium`, `dbName` = `heliumdb`. The same fields are on `GET /api/ops/board`. Nothing in that payload is the connection string, user, or password.
+
+`/boards/ops` loads cards from `GET /api/ops/board` (JSON) **before** the Next server-action Flight payload, so nested `column.tasks` / `activeTasks` dropping cannot empty a Helium-backed board.
+
 ## Database
 
-1. Create a Neon project and copy the connection string into `DATABASE_URL`.
+1. Set `DATABASE_URL` to the workspace Replit Postgres URI (Helium / `heliumdb`) or a Neon URI. Autoscale Publish must use that same URI — see [Replit Publish / Autoscale secrets](#replit-publish--autoscale-secrets).
 2. Apply the schema (pick one):
 
 ```bash

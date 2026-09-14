@@ -27,7 +27,7 @@ import {
 } from "@/lib/actions/boards"
 
 export type { Board, BoardSummary, Column, PlacedSticker, StickerPosition, Task } from "@/lib/types"
-export { extractTasksFromBoard } from "@/lib/types"
+export { extractTasksFromBoard, toFlightSafeBoard } from "@/lib/types"
 export {
   addColumn,
   addTask,

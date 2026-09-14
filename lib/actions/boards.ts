@@ -16,7 +16,7 @@ import {
   planOpsTaskPlacements,
 } from "@/lib/db/reconcile-ops"
 import { requireOpsSession } from "@/lib/auth/session"
-import type { Board, BoardSummary, Column, Task } from "@/lib/types"
+import { toFlightSafeBoard, type Board, type BoardSummary, type Column, type Task } from "@/lib/types"
 
 function now() {
   return new Date()
@@ -47,7 +47,7 @@ function mapLabels(value: unknown): string[] {
 }
 
 function toPlainBoard(board: Board): Board {
-  return JSON.parse(JSON.stringify(board)) as Board
+  return JSON.parse(JSON.stringify(toFlightSafeBoard(board))) as Board
 }
 
 function mapTask(row: TaskRow): Task {
@@ -173,7 +173,6 @@ async function loadBoard(boardId: string): Promise<Board | null> {
 }
 
 async function insertOpsColumns(boardId: string) {
-  if (OPS_COLUMN_TITLES.length === 0) return
   await db.insert(columns).values(
     OPS_COLUMN_TITLES.map((title, order) => ({
       boardId,
