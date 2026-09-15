@@ -4,8 +4,12 @@ import { isOpsRequestAuthorized } from "@/lib/auth/request"
 const PUBLIC_PREFIXES = ["/_next", "/favicon", "/icon", "/placeholder", "/api/auth"]
 
 function isPublicPath(pathname: string) {
-  if (pathname === "/" || pathname === "/auth" || pathname === "/login") return true
+  if (pathname === "/" || pathname === "/auth" || pathname === "/login" || pathname === "/connect") return true
   return PUBLIC_PREFIXES.some((prefix) => pathname.startsWith(prefix))
+}
+
+function isApiLikePath(pathname: string) {
+  return pathname.startsWith("/api/") || pathname === "/mcp" || pathname.startsWith("/mcp/")
 }
 
 export async function middleware(request: NextRequest) {
@@ -28,7 +32,7 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next()
   }
 
-  if (pathname.startsWith("/api/")) {
+  if (isApiLikePath(pathname)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 

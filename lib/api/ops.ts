@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import {
   addTask,
+  deleteTask,
   ensureDefaultBoard,
   getTaskById,
   moveTask,
@@ -9,6 +10,12 @@ import {
 import { requireOpsSession } from "@/lib/auth/session"
 import { fingerprintProcessDatabase } from "@/lib/db/fingerprint"
 import { OPS_COLUMN_TITLES } from "@/lib/db/ops-defaults"
+import {
+  DONE_COLUMN_TITLE,
+  findActiveTaskByTitle,
+  findActiveTasksByTitle,
+  normalizeOpsTitle,
+} from "@/lib/mcp/lookup"
 import type { OpsApiBoard, OpsApiTask, OpsBoardDiagnostics } from "@/lib/ops-board"
 import { getTaskProject, upsertProjectLabel } from "@/lib/projects"
 import { extractTasksFromBoard, type Board, type Column, type Task } from "@/lib/types"
@@ -86,10 +93,6 @@ export async function requireOpsApi() {
   await requireOpsSession()
 }
 
-function normalizeTitle(value: string) {
-  return value.trim().toLowerCase()
-}
-
 export function findOpsColumn(
   board: Board,
   query: { columnId?: string; columnTitle?: string },
@@ -98,10 +101,42 @@ export function findOpsColumn(
     return board.columns.find((column) => column.id === query.columnId)
   }
   if (query.columnTitle) {
-    const needle = normalizeTitle(query.columnTitle)
-    return board.columns.find((column) => normalizeTitle(column.title) === needle)
+    const needle = normalizeOpsTitle(query.columnTitle)
+    return board.columns.find((column) => normalizeOpsTitle(column.title) === needle)
   }
   return undefined
+}
+
+export function projectLabelsForTask(input: { title: string; labels?: string[] }) {
+  const inferred = getTaskProject({ title: input.title, labels: input.labels })
+  return inferred ? upsertProjectLabel(input.labels ?? [], inferred.project) : input.labels ?? []
+}
+
+export async function resolveOpsTask(query: { id?: string; title?: string }): Promise<OpsApiTask> {
+  await requireOpsApi()
+  const id = query.id?.trim()
+  const title = query.title?.trim()
+  if (!id && !title) {
+    throw new Error("id or title is required")
+  }
+
+  if (id) {
+    const task = await getTaskById(id)
+    if (!task?.columnId) {
+      throw new Error("Task not found")
+    }
+    return serializeOpsTask(task)
+  }
+
+  const board = await ensureDefaultBoard()
+  const matches = findActiveTasksByTitle(extractTasksFromBoard(board), title ?? "")
+  if (matches.length === 0) {
+    throw new Error("Task not found")
+  }
+  if (matches.length > 1) {
+    throw new Error("Multiple tasks match title")
+  }
+  return serializeOpsTask(matches[0])
 }
 
 export async function getOpsBoardPayload() {
@@ -133,6 +168,15 @@ export async function createOpsTask(input: {
   }
 
   const board = await ensureDefaultBoard()
+  const existing = findActiveTaskByTitle(extractTasksFromBoard(board), title)
+  if (existing) {
+    return {
+      task: serializeOpsTask(existing),
+      columnId: existing.columnId ?? "",
+      skipped: true as const,
+    }
+  }
+
   const column = findOpsColumn(board, {
     columnTitle: input.columnTitle?.trim() || DEFAULT_OPS_COLUMN_TITLE,
   })
@@ -140,8 +184,7 @@ export async function createOpsTask(input: {
     throw new Error("Column not found")
   }
 
-  const inferred = getTaskProject({ title, labels: input.labels })
-  const labels = inferred ? upsertProjectLabel(input.labels ?? [], inferred.project) : input.labels ?? []
+  const labels = projectLabelsForTask({ title, labels: input.labels })
 
   const task = await addTask(board.id, column.id, {
     title,
@@ -155,7 +198,7 @@ export async function createOpsTask(input: {
     throw new Error("Failed to create task")
   }
 
-  return { task: serializeOpsTask(task), columnId: column.id }
+  return { task: serializeOpsTask(task), columnId: column.id, skipped: false as const }
 }
 
 export async function moveOpsTask(
@@ -188,15 +231,16 @@ export async function moveOpsTask(
 
 export async function patchOpsTask(
   taskId: string,
-  input: { title?: string; description?: string; brief?: string },
+  input: { title?: string; description?: string; brief?: string; labels?: string[] },
 ) {
   await requireOpsApi()
   const title = input.title?.trim()
   const hasTitle = typeof input.title === "string"
   const hasDescription = typeof input.description === "string"
   const hasBrief = typeof input.brief === "string"
-  if (!hasTitle && !hasDescription && !hasBrief) {
-    throw new Error("title, description, or brief is required")
+  const hasLabels = Array.isArray(input.labels)
+  if (!hasTitle && !hasDescription && !hasBrief && !hasLabels) {
+    throw new Error("title, description, brief, or labels is required")
   }
   if (hasTitle && !title) {
     throw new Error("Title is required")
@@ -208,10 +252,14 @@ export async function patchOpsTask(
     throw new Error("Task not found")
   }
 
+  const nextTitle = hasTitle ? title! : existing.title
+  const labels = hasLabels ? projectLabelsForTask({ title: nextTitle, labels: input.labels }) : undefined
+
   const result = await updateTask(board.id, existing.columnId, taskId, {
     ...(hasTitle ? { title } : {}),
     ...(hasDescription ? { description: input.description } : {}),
     ...(hasBrief ? { brief: input.brief } : {}),
+    ...(hasLabels ? { labels } : {}),
   })
   if (!result.success) {
     throw new Error(result.error || "Task not found")
@@ -222,4 +270,23 @@ export async function patchOpsTask(
     throw new Error("Task not found")
   }
   return { task: serializeOpsTask(updated) }
+}
+
+export async function completeOpsTask(taskId: string) {
+  return moveOpsTask(taskId, { columnTitle: DONE_COLUMN_TITLE })
+}
+
+export async function archiveOpsTask(taskId: string) {
+  await requireOpsApi()
+  const board = await ensureDefaultBoard()
+  const existing = await getTaskById(taskId)
+  if (!existing?.columnId) {
+    throw new Error("Task not found")
+  }
+
+  const result = await deleteTask(board.id, existing.columnId, taskId)
+  if (!result.success || !result.removedTask) {
+    throw new Error(result.error || "Task not found")
+  }
+  return { task: serializeOpsTask(result.removedTask) }
 }

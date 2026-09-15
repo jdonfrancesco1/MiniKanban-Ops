@@ -13,7 +13,7 @@ Visual board for chat work. Default columns:
 - Waiting
 - Done
 
-Thin HTTP API so Orca can list and move cards from Grok Bot chat widgets. The visual board stays on this Repl — chat shows pickable card widgets, not an iframe. MCP can come later.
+Thin HTTP API so Orca can list and move cards from Grok Bot chat widgets. The visual board stays on this Repl — chat shows pickable card widgets, not an iframe. Remote MCP (`/mcp`) is the preferred agent path so `OPS_BOARD_SECRET` stays in the connector / server env and never appears in chat tool arguments.
 
 ## Product Vision
 
@@ -31,7 +31,7 @@ Copy `.env.example` to `.env.local`:
 | --- | --- | --- |
 | `DATABASE_URL` | Yes, unless `OPS_BOARD_DATABASE_URL` is set | Postgres connection string (Replit Helium or Neon). Fallback for the ops board pool. |
 | `OPS_BOARD_DATABASE_URL` | Autoscale when Publish `DATABASE_URL` is Neon | **Preferred** connection string for the ops board pool / `getDb` (all ops API + board queries). Set the Autoscale secret to the workspace Helium `DATABASE_URL` if Publish `DATABASE_URL` is Neon. Replit hides managed `DATABASE_URL`, so it cannot be copied in the Publish Secrets UI. |
-| `OPS_BOARD_SECRET` | Recommended in prod | Shared password. Sets an httpOnly session cookie. If omitted, the board is open. |
+| `OPS_BOARD_SECRET` | Recommended in prod | Shared password. Sets an httpOnly session cookie. MCP + `/api/ops/*` use `Authorization: Bearer` with this same secret. If omitted, the board is open. |
 
 Do not add `NEXT_PUBLIC_FIREBASE_*`. There is no Firebase.
 
@@ -160,8 +160,71 @@ Optional: `PATCH /api/ops/tasks/:id` with `{ "title" }`, `{ "brief" }`, and/or `
 
 Equivalent agent header: `-H "X-Ops-Board-Secret: $OPS_BOARD_SECRET"`.
 
+`POST /api/ops/tasks` is idempotent: if an active card already has the same title (trimmed, case-insensitive), the existing card is returned with `skipped: true` instead of inserting a duplicate.
+
+`PATCH /api/ops/tasks/:id` also accepts `{ "labels": ["Giant"] }`.
+`DELETE /api/ops/tasks/:id` soft-archives the card (`archived_at`).
+
+## Remote MCP (Cursor / Grok Bot)
+
+Streamable HTTP on the Autoscale host. Same board and same `lib/api/ops.ts` helpers as `/api/ops/*`. The secret is **only** an HTTP header / connector env var — tools do not accept it.
+
+| | |
+| --- | --- |
+| URL | `https://mini-kanban-ops.replit.app/mcp` |
+| Alias | `https://mini-kanban-ops.replit.app/api/mcp` |
+| Docs | [`/connect`](https://mini-kanban-ops.replit.app/connect) |
+| Transport | Streamable HTTP (`POST` JSON-RPC) |
+| Auth | `Authorization: Bearer <OPS_BOARD_SECRET>` (or `X-Ops-Board-Secret`) |
+| Secret env | `OPS_BOARD_SECRET` — store on the MCP connector / Replit / Cursor server env |
+
+### Tools
+
+| Tool | What it does |
+| --- | --- |
+| `list_board` | Columns + tasks for slug `ops` (default): title, brief, description, column, project labels, createdAt, completedAt |
+| `insert_task` | Column title + title (+ optional brief / description / labels). Skips if an active task with the same title exists |
+| `move_task` | By title or id → `Need you` \| `I'm on` \| `Waiting` \| `Done` |
+| `done_task` | Move to Done (stamps `completed_at`) |
+| `archive_task` | Soft archive |
+| `update_task` | title / brief / description / labels |
+
+### Cursor
+
+Settings → MCP → Add new MCP server (Streamable HTTP), or `mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "minikanban-ops": {
+      "url": "https://mini-kanban-ops.replit.app/mcp",
+      "headers": {
+        "Authorization": "Bearer <OPS_BOARD_SECRET>"
+      }
+    }
+  }
+}
+```
+
+Do not put the secret in a tool argument or in chat. Use the connector header (or an env interpolation your client supports).
+
+### Grok Bot / Orca AddMcpServer
+
+```
+AddMcpServer
+  name: minikanban-ops
+  url: https://mini-kanban-ops.replit.app/mcp
+  transport: streamable-http
+  headers:
+    Authorization: Bearer <OPS_BOARD_SECRET from connector env>
+```
+
+After Autoscale publishes this revision, Orca should AddMcpServer against that URL and keep `OPS_BOARD_SECRET` in the connector env (same value as Replit / Publish Secrets). No SSH, no `psql`, no secret in tool args.
+
+Local: `http://localhost:3000/mcp` with the same Bearer header.
+
 Card face: project chip · decoded title · brief · muted `Created Sep 14`. Done cards also show `Completed Sep 15`. Dates use America/New_York short format (detail/edit: `Sep 15, 2026`). Click opens the full description. Columns scroll so card bottoms are not clipped. Project colors: Giant blue, Paylyte orange, MiniKanban purple/teal, Hangar 18 green, Off Replit slate, Security red, Marketing magenta, James gold.
 
 ## Out of scope
 
-MCP connector (later). Multi-tenant SaaS. Phone auth. Stickers product. Firebase anything. Sticker + audio uploads that depended on Firebase Storage are stubbed/disabled.
+Marketplace selling. Multi-tenant public product. Wiping boards. Replacing the visual board UI. Cloudflare migration. Phone auth. Stickers product. Firebase anything. Sticker + audio uploads that depended on Firebase Storage are stubbed/disabled.

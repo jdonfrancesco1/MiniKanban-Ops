@@ -28,6 +28,13 @@ export function SiteHeader() {
             >
               <Link href="/boards/ops">Board</Link>
             </Button>
+            <Button
+              variant="ghost"
+              className={`text-white/70 hover:text-white hover:bg-white/10 ${pathname === "/connect" ? "text-white bg-white/10" : ""}`}
+              asChild
+            >
+              <Link href="/connect">MCP</Link>
+            </Button>
           </nav>
           {user ? (
             <Button variant="outline" className="border-white/20 text-white hover:bg-white/10" onClick={() => void logout()}>
@@ -51,6 +58,9 @@ export function SiteHeader() {
                 <nav className="flex flex-col gap-4 mt-8">
                   <Link href="/boards/ops" className="px-4 py-2 rounded-md hover:bg-white/5">
                     Board
+                  </Link>
+                  <Link href="/connect" className="px-4 py-2 rounded-md hover:bg-white/5">
+                    MCP
                   </Link>
                   <Link href="/auth" className="px-4 py-2 rounded-md bg-pink-500 hover:bg-pink-600 text-center">
                     Enter
