@@ -10,8 +10,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { cardFaceBrief, descriptionLooksLikeHtml } from "@/lib/card-copy"
+import { isDoneColumnTitle } from "@/lib/task-dates"
 import { getTaskProject } from "@/lib/projects"
 import type { Task } from "@/lib/types"
+import { TaskDateLine } from "./task-date-line"
 import { FormattedDescription } from "./formatted-description"
 import { ProjectChip } from "./project-chip"
 
@@ -19,14 +21,16 @@ type TaskDetailModalProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
   task: Task
+  columnTitle?: string
   onEdit?: () => void
 }
 
-export function TaskDetailModal({ open, onOpenChange, task, onEdit }: TaskDetailModalProps) {
+export function TaskDetailModal({ open, onOpenChange, task, columnTitle, onEdit }: TaskDetailModalProps) {
   const project = getTaskProject(task)
   const title = project?.displayTitle || task.title
   const description = task.description?.trim() || ""
   const brief = cardFaceBrief(task)
+  const showCompleted = isDoneColumnTitle(columnTitle)
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -48,6 +52,15 @@ export function TaskDetailModal({ open, onOpenChange, task, onEdit }: TaskDetail
         </DialogHeader>
 
         <div className="space-y-3 py-2">
+          <div>
+            <p className="text-[11px] uppercase tracking-[0.16em] text-white/45 mb-1.5">Dates</p>
+            <TaskDateLine
+              createdAt={task.createdAt}
+              completedAt={task.completedAt}
+              showCompleted={showCompleted}
+              variant="detail"
+            />
+          </div>
           <div>
             <p className="text-[11px] uppercase tracking-[0.16em] text-white/45 mb-1.5">Project</p>
             <p className="text-sm text-white">{project?.project || "Unassigned"}</p>

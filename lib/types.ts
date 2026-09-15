@@ -21,6 +21,8 @@ export type Task = {
   stickers?: PlacedSticker[]
   createdAt?: string
   updatedAt?: string
+  /** Set when the card enters Done; cleared if it leaves Done. */
+  completedAt?: string | null
   createdBy?: string
   archivedAt?: number
   columnId?: string
@@ -160,6 +162,9 @@ export type OpsApiTask = {
   labels: string[]
   order: number
   columnId: string
+  createdAt?: string
+  updatedAt?: string
+  completedAt?: string | null
 }
 
 export type OpsApiColumn = {
@@ -201,6 +206,9 @@ function mapApiTask(task: OpsApiTask, columnId: string, boardId: string): Task {
     columnId: String(task.columnId || columnId),
     boardId,
     stickers: [],
+    createdAt: task.createdAt,
+    updatedAt: task.updatedAt,
+    completedAt: task.completedAt ?? null,
   }
 }
 

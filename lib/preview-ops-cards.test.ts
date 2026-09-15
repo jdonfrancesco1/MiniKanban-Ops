@@ -18,4 +18,11 @@ describe("ops card preview fixtures", () => {
     assert.match(projectChipClass("Marketing"), /fuchsia/)
     assert.match(projectBarClass("Security"), /red/)
   })
+
+  it("includes created dates and a Done card with completedAt", () => {
+    const source = readFileSync(new URL("./preview-ops-cards.ts", import.meta.url), "utf8")
+    assert.match(source, /createdAt: "2026-09-14T16:00:00.000Z"/)
+    assert.match(source, /completedAt: "2026-09-15T16:00:00.000Z"/)
+    assert.match(source, /columnId: "done"/)
+  })
 })

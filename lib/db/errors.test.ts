@@ -11,4 +11,14 @@ describe("missing column errors", () => {
     assert.equal(isMissingRelationColumnError(new Error("Task not found"), "brief"), false)
     assert.equal(isMissingRelationColumnError(new Error('column "title" does not exist'), "brief"), false)
   })
+
+  it("detects a missing completed_at column from Postgres", () => {
+    assert.equal(
+      isMissingRelationColumnError(
+        new Error('column "completed_at" of relation "tasks" does not exist'),
+        "completed_at",
+      ),
+      true,
+    )
+  })
 })

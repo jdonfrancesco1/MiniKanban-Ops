@@ -19,6 +19,7 @@ export function buildOpsCardPreviewTasks(): Task[] {
       columnId: "need-you",
       boardId: "preview",
       order: index,
+      createdAt: "2026-09-14T16:00:00.000Z",
     })),
     {
       id: "paylyte",
@@ -29,6 +30,7 @@ export function buildOpsCardPreviewTasks(): Task[] {
       columnId: "need-you",
       boardId: "preview",
       order: 20,
+      createdAt: "2026-09-14T16:00:00.000Z",
     },
     {
       id: "james",
@@ -39,6 +41,7 @@ export function buildOpsCardPreviewTasks(): Task[] {
       columnId: "need-you",
       boardId: "preview",
       order: 21,
+      createdAt: "2026-09-14T16:00:00.000Z",
     },
     {
       id: "marketing",
@@ -49,6 +52,7 @@ export function buildOpsCardPreviewTasks(): Task[] {
       columnId: "need-you",
       boardId: "preview",
       order: 22,
+      createdAt: "2026-09-14T16:00:00.000Z",
     },
     {
       id: "security",
@@ -59,6 +63,23 @@ export function buildOpsCardPreviewTasks(): Task[] {
       columnId: "need-you",
       boardId: "preview",
       order: 23,
+      createdAt: "2026-09-14T16:00:00.000Z",
+    },
+    {
+      id: "done-rotate",
+      title: "[Security] Rotate last week's secret",
+      brief: "Last week's ops secret rotation is finished.",
+      description: "OPS_BOARD_SECRET was rotated and James can still sign in.",
+      labels: ["Security"],
+      columnId: "done",
+      boardId: "preview",
+      order: 24,
+      createdAt: "2026-09-14T16:00:00.000Z",
+      completedAt: "2026-09-15T16:00:00.000Z",
     },
   ]
+}
+
+export function previewColumnTitle(columnId: string) {
+  return columnId === "done" ? "Done" : "Need you"
 }
