@@ -1,6 +1,6 @@
 "use client"
 
-import { DndContext } from "@dnd-kit/core"
+import { DndContext, PointerSensor, useSensor, useSensors } from "@dnd-kit/core"
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable"
 import { KanbanCard } from "@/components/kanban-card"
 import { ProjectLegend } from "@/components/project-chip"
@@ -48,6 +48,8 @@ const previewTasks: Task[] = [
 ]
 
 export default function OpsCardPreviewPage() {
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }))
+
   return (
     <div className="min-h-screen bg-[#1a0b2e] text-white p-6">
       <p className="text-xs uppercase tracking-[0.2em] text-pink-300">Ops card preview</p>
@@ -56,7 +58,7 @@ export default function OpsCardPreviewPage() {
         Click a card for the full Need you description. This page is a layout preview and does not load Helium.
       </p>
       <ProjectLegend className="mb-6" />
-      <DndContext>
+      <DndContext sensors={sensors}>
         <SortableContext items={previewTasks.map((task) => task.id)} strategy={verticalListSortingStrategy}>
           <div className="grid gap-3 max-w-md pb-16">
             {previewTasks.map((task) => (

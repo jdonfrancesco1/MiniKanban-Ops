@@ -203,7 +203,7 @@ export function KanbanCard({
           }}
           style={style}
           className={cn(
-            "cursor-grab active:cursor-grabbing relative transition-all duration-200 overflow-visible",
+            "cursor-pointer relative transition-all duration-200 overflow-visible",
             "glassmorphic-card border-l-4",
             projectBarClass(project?.project),
             isDragging && "shadow-lg ring-2 ring-white/20",
@@ -217,18 +217,19 @@ export function KanbanCard({
           onClick={() => {
             if (!isDragging) setShowDetail(true)
           }}
-          {...attributes}
-          {...listeners}
         >
           <CardContent className="p-3 space-y-2 overflow-visible">
             <div className="flex justify-between items-start gap-2">
               <div className="flex items-start gap-2 flex-1 min-w-0">
                 <div
                   className={cn(
-                    "mt-0.5 p-1 rounded text-white/70 shrink-0",
+                    "mt-0.5 p-1 rounded text-white/70 shrink-0 cursor-grab active:cursor-grabbing",
                     "group-hover:bg-white/10 group-hover:text-white transition-colors",
                     isDragging && "bg-white/10 text-white",
                   )}
+                  {...attributes}
+                  {...listeners}
+                  onClick={(event) => event.stopPropagation()}
                 >
                   <GripVertical className="h-4 w-4" />
                 </div>
