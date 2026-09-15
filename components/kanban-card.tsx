@@ -203,9 +203,8 @@ export function KanbanCard({
           }}
           style={style}
           className={cn(
-            "cursor-pointer relative transition-all duration-200 overflow-visible",
-            "glassmorphic-card border-l-4",
-            projectBarClass(project?.project),
+            "cursor-pointer relative transition-all duration-200 overflow-visible pl-1",
+            "glassmorphic-card",
             isDragging && "shadow-lg ring-2 ring-white/20",
             isDropTarget && "ring-2 ring-white/50 ring-offset-2 bg-white/5",
             "hover:shadow-md",
@@ -218,7 +217,11 @@ export function KanbanCard({
             if (!isDragging) setShowDetail(true)
           }}
         >
-          <CardContent className="p-3 space-y-2 overflow-visible">
+          <span
+            aria-hidden
+            className={cn("absolute inset-y-0 left-0 w-1.5 rounded-l-md", projectBarClass(project?.project))}
+          />
+          <CardContent className="p-3 pl-4 space-y-2 overflow-visible">
             <div className="flex justify-between items-start gap-2">
               <div className="flex items-start gap-2 flex-1 min-w-0">
                 <div

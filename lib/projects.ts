@@ -19,44 +19,44 @@ export type OpsProjectStyle = {
 
 export const OPS_PROJECT_STYLES: Record<OpsProject, OpsProjectStyle> = {
   Giant: {
-    chip: "bg-blue-500/25 text-blue-50 border-blue-300/50",
-    bar: "border-l-blue-400",
+    chip: "bg-blue-500 text-white border-blue-300",
+    bar: "bg-blue-400",
     swatch: "bg-blue-400",
   },
   Paylyte: {
-    chip: "bg-orange-500/30 text-orange-50 border-orange-300/50",
-    bar: "border-l-orange-400",
+    chip: "bg-orange-500 text-white border-orange-300",
+    bar: "bg-orange-400",
     swatch: "bg-orange-400",
   },
   MiniKanban: {
-    chip: "bg-teal-500/20 text-violet-100 border-violet-400/45",
-    bar: "border-l-teal-400",
+    chip: "bg-teal-600 text-white border-violet-300",
+    bar: "bg-gradient-to-b from-violet-400 to-teal-400",
     swatch: "bg-gradient-to-b from-violet-400 to-teal-400",
   },
   "Hangar 18": {
-    chip: "bg-emerald-500/25 text-emerald-50 border-emerald-300/50",
-    bar: "border-l-emerald-400",
+    chip: "bg-emerald-500 text-white border-emerald-300",
+    bar: "bg-emerald-400",
     swatch: "bg-emerald-400",
   },
   "Off Replit": {
-    chip: "bg-slate-500/35 text-slate-100 border-slate-300/40",
-    bar: "border-l-slate-400",
+    chip: "bg-slate-500 text-white border-slate-300",
+    bar: "bg-slate-400",
     swatch: "bg-slate-400",
   },
   Security: {
-    chip: "bg-red-500/25 text-red-50 border-red-300/50",
-    bar: "border-l-red-400",
+    chip: "bg-red-500 text-white border-red-300",
+    bar: "bg-red-400",
     swatch: "bg-red-400",
   },
   Marketing: {
-    chip: "bg-fuchsia-500/25 text-fuchsia-50 border-fuchsia-300/50",
-    bar: "border-l-fuchsia-400",
+    chip: "bg-fuchsia-500 text-white border-fuchsia-300",
+    bar: "bg-fuchsia-400",
     swatch: "bg-fuchsia-400",
   },
   James: {
-    chip: "bg-amber-500/30 text-amber-50 border-amber-300/55",
-    bar: "border-l-amber-400",
-    swatch: "bg-amber-400",
+    chip: "bg-amber-400 text-amber-950 border-amber-200",
+    bar: "bg-amber-300",
+    swatch: "bg-amber-300",
   },
 }
 
@@ -141,7 +141,7 @@ export function projectChipClass(project: string) {
 export function projectBarClass(project: string | null | undefined) {
   const known = matchOpsProject(project ?? "")
   if (known) return OPS_PROJECT_STYLES[known].bar
-  return "border-l-white/25"
+  return "bg-white/30"
 }
 
 export function projectSwatchClass(project: string) {
