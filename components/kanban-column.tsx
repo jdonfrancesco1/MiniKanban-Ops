@@ -111,7 +111,7 @@ export function KanbanColumn({
         ref={setNodeRef}
         style={style}
         className={cn(
-          "w-80 shrink-0 flex flex-col h-fit snap-center transition-all duration-200 bg-[#2a1b3e]/80 border-white/10",
+          "w-80 shrink-0 flex flex-col h-full max-h-full min-h-0 snap-center transition-all duration-200 bg-[#2a1b3e]/80 border-white/10 overflow-hidden",
           isColumnDragging && "opacity-80 shadow-xl z-50 scale-[1.02]",
           isDropTarget && "ring-2 ring-pink-400 ring-offset-2 ring-offset-[#1a0b2e]",
           className,
@@ -120,7 +120,7 @@ export function KanbanColumn({
         {...attributes}
       >
         <CardHeader
-          className="p-3 border-b border-white/10 flex flex-row items-center justify-between space-y-0 gap-2 cursor-grab active:cursor-grabbing"
+          className="p-3 border-b border-white/10 flex flex-row items-center justify-between space-y-0 gap-2 cursor-grab active:cursor-grabbing shrink-0"
           {...listeners}
         >
           <div className="flex items-center gap-2 flex-1">
@@ -166,7 +166,7 @@ export function KanbanColumn({
           </Button>
         </CardHeader>
 
-        <CardContent className="p-3 flex-1 flex flex-col gap-3 min-h-[80px] max-h-[calc(100vh-250px)] overflow-y-auto">
+        <CardContent className="p-3 pb-8 flex-1 flex flex-col gap-3 min-h-0 overflow-y-auto overflow-x-visible">
           <SortableContext items={taskIds} strategy={verticalListSortingStrategy} id={`column-${column.id}-tasks`}>
             {(tasks || []).map((task) => (
               <KanbanCard

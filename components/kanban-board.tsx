@@ -109,7 +109,7 @@ export function KanbanBoard({
   }
 
   return (
-    <div className="relative w-full h-full">
+    <div className="relative w-full h-full min-h-0">
       <DndContext
         sensors={sensors}
         collisionDetection={closestCorners}
@@ -117,7 +117,7 @@ export function KanbanBoard({
         onDragEnd={handleDragEnd}
       >
         <SortableContext items={columnIds} strategy={horizontalListSortingStrategy}>
-          <div className="flex gap-4 p-4 h-full overflow-x-auto">
+          <div className="flex items-stretch gap-4 p-4 pb-8 h-full min-h-0 overflow-x-auto overflow-y-hidden">
             {currentColumns.map((column) => {
               const columnTasks = currentTasks
                 .filter((task) => String(task.columnId) === String(column.id))
@@ -133,7 +133,7 @@ export function KanbanBoard({
                   onDeleteColumn={() => onColumnDelete(column.id)}
                   onRenameColumn={(columnId, title) => onColumnUpdate(columnId, title)}
                   onAddTask={(columnId, title, labels) =>
-                    onTaskAdd({ title, description: "", labels: labels ?? [] }, columnId)
+                    onTaskAdd({ title, description: "", brief: "", labels: labels ?? [] }, columnId)
                   }
                   onTaskDelete={(columnId, taskId) => onTaskDelete(taskId, columnId)}
                   onTaskUpdate={onTaskUpdate}
@@ -144,7 +144,7 @@ export function KanbanBoard({
             {!readOnly && (
               <button
                 onClick={() => onColumnAdd("New Column")}
-                className="bg-white/10 hover:bg-white/20 text-white font-semibold py-2 px-4 rounded shadow w-64 h-12 flex items-center justify-center shrink-0"
+                className="bg-white/10 hover:bg-white/20 text-white font-semibold py-2 px-4 rounded shadow w-64 h-12 flex items-center justify-center shrink-0 self-start"
               >
                 + Add Column
               </button>

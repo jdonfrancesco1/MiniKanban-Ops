@@ -32,7 +32,7 @@ export function FormattedDescription({
 
   // Create a div with the HTML content
   return (
-    <div className={cn("relative rounded-md overflow-hidden", className)}>
+    <div className={cn("relative rounded-md overflow-visible", className)}>
       <div
         className={cn(
           "prose prose-sm max-w-none text-white/80",

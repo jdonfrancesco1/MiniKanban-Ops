@@ -131,7 +131,7 @@ curl -sS http://localhost:3000/api/ops/board \
 
 ### `POST /api/ops/tasks`
 
-Body `{ "title": "…", "columnTitle": "Need you" }`. `columnTitle` is optional and defaults to **Need you**. Creates the card at the end of that column. Returns `{ task, columnId }`.
+Body `{ "title": "…", "columnTitle": "Need you", "brief": "…", "description": "…" }`. `columnTitle` is optional and defaults to **Need you**. Creates the card at the end of that column. Returns `{ task, columnId }`.
 
 ```bash
 curl -sS http://localhost:3000/api/ops/tasks \
@@ -151,9 +151,12 @@ curl -sS http://localhost:3000/api/ops/tasks/TASK_ID/move \
   -d "{\"columnTitle\":\"I'm on\"}"
 ```
 
-Optional: `PATCH /api/ops/tasks/:id` with `{ "title" }` and/or `{ "description" }`.
+Optional: `PATCH /api/ops/tasks/:id` with `{ "title" }`, `{ "brief" }`, and/or `{ "description" }`.
+`brief` is the 1–2 line card-face summary. `description` is the full ask James sees when he opens the card.
 
 Equivalent agent header: `-H "X-Ops-Board-Secret: $OPS_BOARD_SECRET"`.
+
+Card face: project chip · decoded title · brief. Click opens the full description. Columns scroll so card bottoms are not clipped. Project colors: Giant blue, Paylyte orange, MiniKanban purple/teal, Hangar 18 green, Off Replit slate, Security red, Marketing magenta, James gold.
 
 ## Out of scope
 

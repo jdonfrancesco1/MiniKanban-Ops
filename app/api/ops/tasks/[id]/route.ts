@@ -11,6 +11,7 @@ export async function PATCH(request: Request, context: RouteContext) {
     const body = (await request.json().catch(() => ({}))) as {
       title?: unknown
       description?: unknown
+      brief?: unknown
     }
     if (body.title !== undefined && typeof body.title !== "string") {
       return NextResponse.json({ error: "title must be a string" }, { status: 400 })
@@ -18,11 +19,15 @@ export async function PATCH(request: Request, context: RouteContext) {
     if (body.description !== undefined && typeof body.description !== "string") {
       return NextResponse.json({ error: "description must be a string" }, { status: 400 })
     }
+    if (body.brief !== undefined && typeof body.brief !== "string") {
+      return NextResponse.json({ error: "brief must be a string" }, { status: 400 })
+    }
 
     return NextResponse.json(
       await patchOpsTask(id, {
         title: body.title,
         description: body.description,
+        brief: body.brief,
       }),
     )
   } catch (error) {

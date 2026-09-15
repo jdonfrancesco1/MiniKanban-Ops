@@ -29,6 +29,7 @@ export const tasks = pgTable("tasks", {
     .references(() => columns.id, { onDelete: "cascade" }),
   title: text("title").notNull(),
   description: text("description").notNull().default(""),
+  brief: text("brief"),
   labels: jsonb("labels").$type<string[]>().notNull().default([]),
   order: integer("order").notNull().default(0),
   archivedAt: timestamp("archived_at", { withTimezone: true }),

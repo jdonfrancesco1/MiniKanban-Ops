@@ -1,7 +1,7 @@
 "use client"
 
 import { Badge } from "@/components/ui/badge"
-import { OPS_PROJECTS, projectChipClass } from "@/lib/projects"
+import { OPS_PROJECTS, projectChipClass, projectSwatchClass } from "@/lib/projects"
 import { cn } from "@/lib/utils"
 
 export function ProjectChip({
@@ -14,6 +14,7 @@ export function ProjectChip({
   return (
     <Badge
       variant="secondary"
+      data-project={project}
       className={cn("text-[10px] font-semibold uppercase tracking-wide border", projectChipClass(project), className)}
     >
       {project}
@@ -49,6 +50,23 @@ export function ProjectPicker({
           </button>
         )
       })}
+    </div>
+  )
+}
+
+export function ProjectLegend({ className }: { className?: string }) {
+  return (
+    <div
+      className={cn("flex flex-wrap items-center gap-x-3 gap-y-1.5", className)}
+      data-testid="project-legend"
+      aria-label="Project colors"
+    >
+      {OPS_PROJECTS.map((project) => (
+        <span key={project} className="inline-flex items-center gap-1.5 text-[11px] text-white/75">
+          <span className={cn("h-2.5 w-2.5 shrink-0 rounded-full", projectSwatchClass(project))} aria-hidden />
+          {project}
+        </span>
+      ))}
     </div>
   )
 }

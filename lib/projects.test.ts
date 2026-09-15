@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import { describe, it } from "node:test"
 import { extractTasksFromBoard, type Board } from "./types.ts"
-import { getTaskProject, parseProjectPrefix, upsertProjectLabel } from "./projects.ts"
+import { getTaskProject, matchOpsProject, parseProjectPrefix, projectBarClass, upsertProjectLabel } from "./projects.ts"
 
 describe("project prefix and labels", () => {
   it("parses [Project] and Project: title conventions", () => {
@@ -14,7 +14,7 @@ describe("project prefix and labels", () => {
     const found = getTaskProject({ title: "[Security] Rotate keys", labels: ["Giant"] })
     assert.equal(found?.project, "Giant")
     assert.equal(found?.source, "label")
-    assert.equal(found?.displayTitle, "[Security] Rotate keys")
+    assert.equal(found?.displayTitle, "Rotate keys")
   })
 
   it("uses a title prefix when labels are empty", () => {
@@ -27,6 +27,26 @@ describe("project prefix and labels", () => {
   it("replaces the previous project label", () => {
     assert.deepEqual(upsertProjectLabel(["Paylyte", "blocked"], "Giant"), ["Giant", "blocked"])
     assert.deepEqual(upsertProjectLabel(["blocked"], null), ["blocked"])
+  })
+
+  it("uses a project field when present", () => {
+    const found = getTaskProject({ title: "Review the ask", labels: ["Marketing"], project: "James" })
+    assert.equal(found?.project, "James")
+    assert.equal(found?.source, "field")
+    assert.equal(found?.displayTitle, "Review the ask")
+  })
+
+  it("maps locked project colors and aliases", () => {
+    assert.equal(matchOpsProject("Off Replit/CF"), "Off Replit")
+    assert.equal(matchOpsProject("James"), "James")
+    assert.equal(projectBarClass("Giant"), "bg-blue-400")
+    assert.equal(projectBarClass("Paylyte"), "bg-orange-400")
+    assert.equal(projectBarClass("MiniKanban"), "bg-gradient-to-b from-violet-400 to-teal-400")
+    assert.equal(projectBarClass("Hangar 18"), "bg-emerald-400")
+    assert.equal(projectBarClass("Off Replit"), "bg-slate-400")
+    assert.equal(projectBarClass("Security"), "bg-red-400")
+    assert.equal(projectBarClass("Marketing"), "bg-fuchsia-400")
+    assert.equal(projectBarClass("James"), "bg-amber-300")
   })
 })
 

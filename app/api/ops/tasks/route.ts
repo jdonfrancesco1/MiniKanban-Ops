@@ -8,6 +8,9 @@ export async function POST(request: Request) {
     const body = (await request.json().catch(() => ({}))) as {
       title?: unknown
       columnTitle?: unknown
+      brief?: unknown
+      description?: unknown
+      labels?: unknown
     }
     if (typeof body.title !== "string" || !body.title.trim()) {
       return NextResponse.json({ error: "Title is required" }, { status: 400 })
@@ -15,11 +18,23 @@ export async function POST(request: Request) {
     if (body.columnTitle !== undefined && typeof body.columnTitle !== "string") {
       return NextResponse.json({ error: "columnTitle must be a string" }, { status: 400 })
     }
+    if (body.brief !== undefined && typeof body.brief !== "string") {
+      return NextResponse.json({ error: "brief must be a string" }, { status: 400 })
+    }
+    if (body.description !== undefined && typeof body.description !== "string") {
+      return NextResponse.json({ error: "description must be a string" }, { status: 400 })
+    }
+    if (body.labels !== undefined && (!Array.isArray(body.labels) || body.labels.some((label) => typeof label !== "string"))) {
+      return NextResponse.json({ error: "labels must be a string array" }, { status: 400 })
+    }
 
     return NextResponse.json(
       await createOpsTask({
         title: body.title,
         columnTitle: body.columnTitle,
+        brief: body.brief,
+        description: body.description,
+        labels: body.labels,
       }),
       { status: 201 },
     )
