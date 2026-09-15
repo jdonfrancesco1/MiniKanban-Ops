@@ -1,14 +1,15 @@
 import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres"
 import { Pool } from "pg"
+import { getOpsBoardDatabaseUrl } from "./fingerprint"
 import * as schema from "./schema"
 
 export type OpsDb = NodePgDatabase<typeof schema>
 
 function createPool() {
-  const connectionString = process.env.DATABASE_URL
+  const connectionString = getOpsBoardDatabaseUrl()
   if (!connectionString) {
     throw new Error(
-      "DATABASE_URL is not set. Add a Neon connection string to .env.local (see .env.example).",
+      "OPS_BOARD_DATABASE_URL or DATABASE_URL is not set. Add a Postgres connection string to .env.local (see .env.example).",
     )
   }
 
@@ -39,7 +40,8 @@ export function getDb(): OpsDb {
 
 /**
  * Lazy so `next build` can import server modules / collect route data
- * without a live DATABASE_URL (Replit Publish build has secrets only at runtime).
+ * without a live OPS_BOARD_DATABASE_URL / DATABASE_URL
+ * (Replit Publish build has secrets only at runtime).
  */
 export const db: OpsDb = new Proxy({} as OpsDb, {
   get(_target, property) {

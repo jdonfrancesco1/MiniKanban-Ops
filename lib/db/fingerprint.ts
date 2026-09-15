@@ -3,6 +3,18 @@ export type DatabaseFingerprint = {
   dbName: string
 }
 
+/**
+ * Connection string for the ops board pool / getDb.
+ * Prefer OPS_BOARD_DATABASE_URL so Autoscale can target workspace Helium
+ * when Replit hides managed DATABASE_URL or Publish DATABASE_URL is Neon.
+ */
+export function getOpsBoardDatabaseUrl(): string | undefined {
+  const override = process.env.OPS_BOARD_DATABASE_URL?.trim()
+  if (override) return override
+  const fallback = process.env.DATABASE_URL?.trim()
+  return fallback || undefined
+}
+
 const SAFE_NAME = /^[a-zA-Z0-9._-]+$/
 
 function sanitizeToken(value: string, fallback: string) {
@@ -26,7 +38,8 @@ function hostSuffix(hostname: string) {
 }
 
 /**
- * Non-secret view of DATABASE_URL: last host labels + database name.
+ * Non-secret view of the ops board URL: last host labels + database name.
+ * Uses the same OPS_BOARD_DATABASE_URL → DATABASE_URL preference as getDb.
  * Never returns user, password, port, query string, or the full hostname.
  */
 export function fingerprintDatabaseUrl(connectionString: string | undefined | null): DatabaseFingerprint {
@@ -47,5 +60,5 @@ export function fingerprintDatabaseUrl(connectionString: string | undefined | nu
 }
 
 export function fingerprintProcessDatabase(): DatabaseFingerprint {
-  return fingerprintDatabaseUrl(process.env.DATABASE_URL)
+  return fingerprintDatabaseUrl(getOpsBoardDatabaseUrl())
 }
