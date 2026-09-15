@@ -28,16 +28,14 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "labels must be a string array" }, { status: 400 })
     }
 
-    return NextResponse.json(
-      await createOpsTask({
-        title: body.title,
-        columnTitle: body.columnTitle,
-        brief: body.brief,
-        description: body.description,
-        labels: body.labels,
-      }),
-      { status: 201 },
-    )
+    const created = await createOpsTask({
+      title: body.title,
+      columnTitle: body.columnTitle,
+      brief: body.brief,
+      description: body.description,
+      labels: body.labels,
+    })
+    return NextResponse.json(created, { status: created.skipped ? 200 : 201 })
   } catch (error) {
     return opsApiError(error)
   }

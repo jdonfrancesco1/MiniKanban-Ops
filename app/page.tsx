@@ -33,6 +33,10 @@ export default function Home() {
           <Link href="/boards/ops" className="text-pink-400 hover:text-pink-300">
             Deep link
           </Link>
+          {" · "}
+          <Link href="/connect" className="text-pink-400 hover:text-pink-300">
+            MCP
+          </Link>
         </div>
       </footer>
     </div>
