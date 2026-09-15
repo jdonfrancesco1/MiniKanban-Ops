@@ -18,9 +18,11 @@ import { useToast } from "@/hooks/use-toast"
 import { updateTask, type Task } from "@/lib/db-service"
 import { Badge } from "@/components/ui/badge"
 import { descriptionForEditor, isLocalPreviewBoard } from "@/lib/card-copy"
+import { isDoneColumnTitle } from "@/lib/task-dates"
 import { matchOpsProject, upsertProjectLabel } from "@/lib/projects"
 import { ProjectPicker } from "@/components/project-chip"
 import { EditorErrorBoundary } from "@/components/editor-error-boundary"
+import { TaskDateLine } from "@/components/task-date-line"
 
 type TaskEditModalProps = {
   open: boolean
@@ -28,10 +30,11 @@ type TaskEditModalProps = {
   task: Task
   boardId: string
   columnId: string
+  columnTitle?: string
   onSave: (updatedTask: Task) => void
 }
 
-export function TaskEditModal({ open, onOpenChange, task, boardId, columnId, onSave }: TaskEditModalProps) {
+export function TaskEditModal({ open, onOpenChange, task, boardId, columnId, columnTitle, onSave }: TaskEditModalProps) {
   const [title, setTitle] = useState(task.title)
   const [brief, setBrief] = useState(task.brief ?? "")
   const [description, setDescription] = useState("")
@@ -126,6 +129,17 @@ export function TaskEditModal({ open, onOpenChange, task, boardId, columnId, onS
           </DialogHeader>
 
           <div className="grid gap-6 py-4">
+            <div className="grid gap-2">
+              <Label className="dark:text-neutral-300">Dates</Label>
+              <TaskDateLine
+                createdAt={task.createdAt}
+                completedAt={task.completedAt}
+                showCompleted={isDoneColumnTitle(columnTitle)}
+                variant="detail"
+                className="text-neutral-500 dark:text-neutral-400"
+              />
+            </div>
+
             <div className="grid gap-2">
               <Label htmlFor="title" className="dark:text-neutral-300">
                 Title

@@ -84,9 +84,13 @@ npm run db:migrate
 
 # Or run the SQL by hand in the Neon SQL editor
 # drizzle/0000_init.sql
+# drizzle/0001_task_brief.sql
+# drizzle/0002_task_completed_at.sql
 ```
 
 The first authenticated load of `/boards` or `/boards/ops` creates the default **Ops** board with the four columns above. No seed script required.
+
+`tasks.created_at` is shown on every card. `tasks.completed_at` is stamped when a card enters **Done** and cleared if it leaves Done. Existing Done cards without `completed_at` are backfilled from `updated_at` as a best-effort completion date (not a true completion timestamp). Runtime `ALTER TABLE … ADD COLUMN IF NOT EXISTS` covers `brief` and `completed_at` the same way.
 
 `drizzle.config.ts` falls back to `postgresql://user:password@localhost:5432/minikanban_ops` only so `drizzle-kit` can start without a live Neon account. That placeholder is not a real database.
 
@@ -122,7 +126,7 @@ Missing or wrong credentials return `401` JSON: `{ "error": "Unauthorized" }`. I
 
 ### `GET /api/ops/board`
 
-Ensures the default Ops board exists. Returns `{ board: { id, title, slug, columns: [{ id, title, order, tasks: [{ id, title, description, order, columnId }] }] } }`.
+Ensures the default Ops board exists. Returns `{ board: { id, title, slug, columns: [{ id, title, order, tasks: [{ id, title, description, brief, order, columnId, createdAt, completedAt }] }] } }`.
 
 ```bash
 curl -sS http://localhost:3000/api/ops/board \
@@ -156,7 +160,7 @@ Optional: `PATCH /api/ops/tasks/:id` with `{ "title" }`, `{ "brief" }`, and/or `
 
 Equivalent agent header: `-H "X-Ops-Board-Secret: $OPS_BOARD_SECRET"`.
 
-Card face: project chip · decoded title · brief. Click opens the full description. Columns scroll so card bottoms are not clipped. Project colors: Giant blue, Paylyte orange, MiniKanban purple/teal, Hangar 18 green, Off Replit slate, Security red, Marketing magenta, James gold.
+Card face: project chip · decoded title · brief · muted `Created Sep 14`. Done cards also show `Completed Sep 15`. Dates use America/New_York short format (detail/edit: `Sep 15, 2026`). Click opens the full description. Columns scroll so card bottoms are not clipped. Project colors: Giant blue, Paylyte orange, MiniKanban purple/teal, Hangar 18 green, Off Replit slate, Security red, Marketing magenta, James gold.
 
 ## Out of scope
 

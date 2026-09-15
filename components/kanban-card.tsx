@@ -21,7 +21,9 @@ import { useToast } from "@/hooks/use-toast"
 import { useUndo } from "@/hooks/use-undo"
 import { deleteTask, type Task } from "@/lib/db-service"
 import { cardFaceBrief } from "@/lib/card-copy"
+import { isDoneColumnTitle } from "@/lib/task-dates"
 import { getTaskProject, projectCardChrome, projectRailStyle } from "@/lib/projects"
+import { TaskDateLine } from "./task-date-line"
 import { cn } from "@/lib/utils"
 import { ProjectChip } from "./project-chip"
 import { EditorErrorBoundary } from "./editor-error-boundary"
@@ -35,6 +37,7 @@ type KanbanCardProps = {
   task: Task
   boardId: string
   columnId: string
+  columnTitle?: string
   isDropTarget?: boolean
   className?: string
   onStickerAdd?: (sticker: StickerItem) => void
@@ -48,6 +51,7 @@ export function KanbanCard({
   task,
   boardId,
   columnId,
+  columnTitle,
   isDropTarget = false,
   className,
   onStickerAdd,
@@ -101,6 +105,7 @@ export function KanbanCard({
   const extraLabels = (task.labels || []).filter((label) => label !== project?.project)
   const brief = cardFaceBrief(task)
   const displayTitle = project?.displayTitle || task.title
+  const showCompleted = isDoneColumnTitle(columnTitle)
 
   // Handle delete task
   const handleDeleteTask = async () => {
@@ -251,6 +256,12 @@ export function KanbanCard({
                       {brief}
                     </p>
                   ) : null}
+                  <TaskDateLine
+                    createdAt={task.createdAt}
+                    completedAt={task.completedAt}
+                    showCompleted={showCompleted}
+                    variant="card"
+                  />
                 </div>
               </div>
             </div>
@@ -323,6 +334,7 @@ export function KanbanCard({
         open={showDetail}
         onOpenChange={setShowDetail}
         task={task}
+        columnTitle={columnTitle}
         onEdit={() => setShowEditModal(true)}
       />
 
@@ -333,6 +345,7 @@ export function KanbanCard({
           task={task}
           boardId={boardId}
           columnId={columnId}
+          columnTitle={columnTitle}
           onSave={handleTaskUpdated}
         />
       </EditorErrorBoundary>

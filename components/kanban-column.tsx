@@ -174,6 +174,7 @@ export function KanbanColumn({
                 task={task}
                 boardId={boardId}
                 columnId={column.id}
+                columnTitle={column.title}
                 onDeleted={() => onTaskDelete?.(column.id, task.id)}
                 onUpdated={onTaskUpdate}
               />

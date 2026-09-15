@@ -18,6 +18,7 @@ import {
 import { planGiantSmokeBackfill } from "@/lib/card-copy"
 import { requireOpsSession } from "@/lib/auth/session"
 import { isMissingRelationColumnError } from "@/lib/db/errors"
+import { isDoneColumnTitle, nextCompletedAt } from "@/lib/task-dates"
 import { toFlightSafeBoard, type Board, type BoardSummary, type Column, type Task } from "@/lib/types"
 
 function now() {
@@ -64,6 +65,7 @@ function mapTask(row: TaskRow): Task {
     stickers: [],
     createdAt: toIso(row.createdAt),
     updatedAt: toIso(row.updatedAt),
+    completedAt: toIso(row.completedAt) ?? null,
     createdBy: "ops",
     archivedAt: hidden && archivedAt ? archivedAt.getTime() : undefined,
     columnId: String(row.columnId),
@@ -89,7 +91,7 @@ async function loadBoard(boardId: string): Promise<Board | null> {
     .where(eq(columns.boardId, board.id))
     .orderBy(asc(columns.order), asc(columns.createdAt))
 
-  const taskRows = await withTaskBriefColumn(() =>
+  const taskRows = await withTaskSchemaColumns(() =>
     db
       .select()
       .from(tasks)
@@ -278,6 +280,7 @@ async function reconcileOpsTasks(opsBoardId: string) {
   }
 
   await backfillGiantSmokeCopy()
+  await backfillCompletedAtFromUpdatedAt()
 }
 
 async function touchBoard(boardId: string) {
@@ -288,18 +291,58 @@ export async function ensureTaskBriefColumn() {
   await db.execute(sql`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS brief text`)
 }
 
-async function withTaskBriefColumn<T>(run: () => Promise<T>): Promise<T> {
+export async function ensureTaskCompletedAtColumn() {
+  await db.execute(sql`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS completed_at timestamptz`)
+}
+
+export async function ensureTaskSchemaColumns() {
+  await ensureTaskBriefColumn()
+  await ensureTaskCompletedAtColumn()
+}
+
+async function withTaskSchemaColumns<T>(run: () => Promise<T>): Promise<T> {
   try {
     return await run()
   } catch (error) {
-    if (!isMissingRelationColumnError(error, "brief")) throw error
-    await ensureTaskBriefColumn()
+    const missingBrief = isMissingRelationColumnError(error, "brief")
+    const missingCompleted = isMissingRelationColumnError(error, "completed_at")
+    if (!missingBrief && !missingCompleted) throw error
+    await ensureTaskSchemaColumns()
     return await run()
   }
 }
 
+/** Existing Done cards without completed_at use updated_at as a best-effort completion date. */
+export async function backfillCompletedAtFromUpdatedAt() {
+  await ensureTaskCompletedAtColumn()
+  await db.execute(sql`
+    UPDATE tasks t
+    SET completed_at = t.updated_at
+    FROM columns c
+    WHERE t.column_id = c.id
+      AND lower(btrim(c.title)) = 'done'
+      AND t.completed_at IS NULL
+  `)
+}
+
+async function columnTitleById(columnId: string | null | undefined) {
+  if (!columnId) return null
+  const [column] = await db.select({ title: columns.title }).from(columns).where(eq(columns.id, columnId)).limit(1)
+  return column?.title ?? null
+}
+
+async function completedAtForColumnChange(fromColumnId: string | null | undefined, toColumnId: string | null | undefined) {
+  const stamped = nextCompletedAt({
+    fromTitle: await columnTitleById(fromColumnId),
+    toTitle: await columnTitleById(toColumnId),
+    now: now(),
+  })
+  if (stamped === undefined) return {}
+  return { completedAt: stamped }
+}
+
 export async function backfillGiantSmokeCopy() {
-  await ensureTaskBriefColumn()
+  await ensureTaskSchemaColumns()
   const rows = await db.select().from(tasks)
   let updated = 0
 
@@ -332,6 +375,7 @@ export async function backfillGiantSmokeCopy() {
 
 export async function ensureDefaultBoard(): Promise<Board> {
   await requireOpsSession()
+  await ensureTaskSchemaColumns()
 
   const boardRows = await db.select().from(boards)
   const counts = await db
@@ -582,7 +626,9 @@ export async function restoreColumn(boardId: string, column: Column) {
 
 export async function getTaskById(taskId: string): Promise<Task | null> {
   await requireOpsSession()
-  const [row] = await db.select().from(tasks).where(eq(tasks.id, taskId)).limit(1)
+  const [row] = await withTaskSchemaColumns(() =>
+    db.select().from(tasks).where(eq(tasks.id, taskId)).limit(1),
+  )
   if (!row || row.archivedAt) return null
   return mapTask(row)
 }
@@ -618,18 +664,21 @@ export async function addTask(
     labels: task.labels,
   })
 
-  const [created] = await db
-    .insert(tasks)
-    .values({
-      boardId,
-      columnId,
-      title,
-      description: smoke?.description ?? task.description ?? "",
-      brief: smoke?.brief ?? task.brief ?? "",
-      labels: smoke?.labels ?? task.labels ?? [],
-      order: nextOrder,
-    })
-    .returning()
+  const [created] = await withTaskSchemaColumns(() =>
+    db
+      .insert(tasks)
+      .values({
+        boardId,
+        columnId,
+        title,
+        description: smoke?.description ?? task.description ?? "",
+        brief: smoke?.brief ?? task.brief ?? "",
+        labels: smoke?.labels ?? task.labels ?? [],
+        order: nextOrder,
+        completedAt: isDoneColumnTitle(column.title) ? now() : null,
+      })
+      .returning(),
+  )
 
   await touchBoard(boardId)
   return mapTask(created)
@@ -643,7 +692,7 @@ export async function updateTask(
 ) {
   await requireOpsSession()
 
-  const [existing] = await withTaskBriefColumn(() =>
+  const [existing] = await withTaskSchemaColumns(() =>
     db
       .select()
       .from(tasks)
@@ -654,8 +703,9 @@ export async function updateTask(
   if (!existing) return { success: false, error: "Task not found" }
 
   const nextColumnId = updates.columnId && updates.columnId !== existing.columnId ? updates.columnId : existing.columnId
+  const completedPatch = await completedAtForColumnChange(existing.columnId, nextColumnId)
 
-  await withTaskBriefColumn(() =>
+  await withTaskSchemaColumns(() =>
     db
       .update(tasks)
       .set({
@@ -665,6 +715,7 @@ export async function updateTask(
         labels: updates.labels ?? existing.labels,
         columnId: nextColumnId,
         updatedAt: now(),
+        ...completedPatch,
       })
       .where(eq(tasks.id, taskId)),
   )
@@ -712,16 +763,23 @@ export async function restoreTask(boardId: string, columnIdOrTaskId: string, tas
 
   if (!existing) {
     if (!task) return { success: false, error: "Task not found" }
+    const restoreColumnId = preferredColumnId || columnIdOrTaskId
+    const restoreTitle = await columnTitleById(restoreColumnId)
     await db.insert(tasks).values({
       id: task.id,
       boardId,
-      columnId: preferredColumnId || columnIdOrTaskId,
+      columnId: restoreColumnId,
       title: task.title,
       description: task.description ?? "",
       brief: task.brief ?? "",
       labels: task.labels ?? [],
       order: task.order ?? 0,
       archivedAt: null,
+      completedAt: task.completedAt
+        ? asDate(task.completedAt)
+        : isDoneColumnTitle(restoreTitle)
+          ? now()
+          : null,
     })
     await touchBoard(boardId)
     return { success: true }
@@ -741,9 +799,10 @@ export async function restoreTask(boardId: string, columnIdOrTaskId: string, tas
     columnId = fallback.id
   }
 
+  const completedPatch = await completedAtForColumnChange(existing.columnId, columnId)
   await db
     .update(tasks)
-    .set({ archivedAt: null, columnId, updatedAt: now() })
+    .set({ archivedAt: null, columnId, updatedAt: now(), ...completedPatch })
     .where(eq(tasks.id, taskId))
   await touchBoard(boardId)
   return { success: true }
@@ -776,10 +835,13 @@ export async function moveTask(
   withoutMoved.splice(clamped, 0, { id: taskId } as TaskRow)
 
   if (sourceColumnId !== destinationColumnId) {
-    await db
-      .update(tasks)
-      .set({ columnId: destinationColumnId, updatedAt: now() })
-      .where(and(eq(tasks.id, taskId), eq(tasks.boardId, boardId)))
+    const completedPatch = await completedAtForColumnChange(sourceColumnId, destinationColumnId)
+    await withTaskSchemaColumns(() =>
+      db
+        .update(tasks)
+        .set({ columnId: destinationColumnId, updatedAt: now(), ...completedPatch })
+        .where(and(eq(tasks.id, taskId), eq(tasks.boardId, boardId))),
+    )
   }
 
   for (const [index, task] of withoutMoved.entries()) {

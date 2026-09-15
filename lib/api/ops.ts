@@ -26,6 +26,9 @@ export function serializeOpsTask(task: Task): OpsApiTask {
     labels: Array.isArray(task.labels) ? task.labels : [],
     order: task.order ?? 0,
     columnId: task.columnId ?? "",
+    createdAt: task.createdAt,
+    updatedAt: task.updatedAt,
+    completedAt: task.completedAt ?? null,
   }
 }
 

@@ -103,6 +103,8 @@ describe("hydrateOpsApiBoard", () => {
             labels: ["Giant"],
             order: 0,
             columnId: "need",
+            createdAt: "2026-09-14T16:00:00.000Z",
+            completedAt: null,
           },
         ],
       },
@@ -116,6 +118,8 @@ describe("hydrateOpsApiBoard", () => {
         labels: ["Giant"],
         order: 0,
         columnId: "need",
+        createdAt: "2026-09-14T16:00:00.000Z",
+        completedAt: null,
       },
     ],
   }
@@ -126,6 +130,37 @@ describe("hydrateOpsApiBoard", () => {
     assert.equal(tasks.length, 1)
     assert.equal(tasks[0].columnId, "need")
     assert.equal(board.columns[0].id, "need")
+    assert.equal(tasks[0].createdAt, "2026-09-14T16:00:00.000Z")
+    assert.equal(tasks[0].completedAt, null)
+  })
+
+  it("keeps created and completed dates on Done cards", () => {
+    const board = hydrateOpsApiBoard({
+      ...apiBoard,
+      columns: [
+        ...apiBoard.columns,
+        {
+          id: "done",
+          title: "Done",
+          order: 3,
+          tasks: [
+            {
+              id: "t-done",
+              title: "Finished ask",
+              description: "",
+              labels: [],
+              order: 0,
+              columnId: "done",
+              createdAt: "2026-09-14T16:00:00.000Z",
+              completedAt: "2026-09-15T16:00:00.000Z",
+            },
+          ],
+        },
+      ],
+    })
+    const done = extractTasksFromBoard(board).find((task) => task.id === "t-done")
+    assert.equal(done?.createdAt, "2026-09-14T16:00:00.000Z")
+    assert.equal(done?.completedAt, "2026-09-15T16:00:00.000Z")
   })
 
   it("uses top-level activeTasks when the JSON API omitted nested column.tasks", () => {
