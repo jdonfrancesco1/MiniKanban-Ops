@@ -110,6 +110,19 @@
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
+/* Paylyte-style left color banner. Color comes from inline paint so purge cannot drop it. */
+.ops-project-rail {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 0.5rem;
+  border-top-left-radius: 0.5rem;
+  border-bottom-left-radius: 0.5rem;
+  pointer-events: none;
+  z-index: 1;
+}
+
 .todo-gradient {
   background: linear-gradient(135deg, rgba(147, 51, 234, 0.3) 0%, rgba(139, 92, 246, 0.2) 100%);
 }

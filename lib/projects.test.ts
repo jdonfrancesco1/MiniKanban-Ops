@@ -3,12 +3,16 @@ import { readFileSync } from "node:fs"
 import { describe, it } from "node:test"
 import { extractTasksFromBoard, type Board } from "./types.ts"
 import {
+  OPS_PROJECTS,
   getTaskProject,
   matchOpsProject,
   opsProjectTailwindSafelist,
   parseProjectPrefix,
   projectBarClass,
+  projectCardChrome,
   projectChipClass,
+  projectPaint,
+  projectRailStyle,
   upsertProjectLabel,
 } from "./projects.ts"
 
@@ -71,6 +75,34 @@ describe("project prefix and labels", () => {
     const config = readFileSync(new URL("../tailwind.config.ts", import.meta.url), "utf8")
     assert.match(config, /\.\/lib\/\*\*\/\*\.\{ts,tsx\}/)
     assert.match(config, /safelist:\s*opsProjectTailwindSafelist\(\)/)
+  })
+
+  it("pairs a pill paint with a left rail for every known project", () => {
+    for (const project of OPS_PROJECTS) {
+      const chrome = projectCardChrome(project)
+      assert.ok(chrome, `${project} must have card chrome`)
+      assert.equal(chrome.known, project)
+      assert.ok(chrome.paint.chip, `${project} missing chip paint`)
+      assert.ok(chrome.paint.rail, `${project} missing rail paint`)
+      assert.ok(chrome.chipStyle?.backgroundColor, `${project} missing chip style`)
+      const rail = projectRailStyle(project)
+      assert.ok(rail.backgroundColor || rail.backgroundImage, `${project} missing rail style`)
+    }
+    assert.equal(projectPaint("Security")?.rail, "#f87171")
+    assert.equal(projectPaint("Paylyte")?.rail, "#fb923c")
+    assert.equal(projectPaint("Marketing")?.chip, "#d946ef")
+  })
+
+  it("gives James's Security-labeled card both pill and rail paints", () => {
+    const found = getTaskProject({
+      title: "BigMofo standing watch — Paylyte/Giant auth+payments",
+      labels: ["Security"],
+    })
+    assert.equal(found?.known, "Security")
+    const chrome = projectCardChrome(found?.project)
+    assert.equal(chrome?.known, "Security")
+    assert.equal(chrome?.paint.chip, "#ef4444")
+    assert.equal(chrome?.paint.rail, "#f87171")
   })
 
   it("safelists every project chip, bar, and swatch class token", () => {

@@ -1,7 +1,7 @@
 "use client"
 
 import { Badge } from "@/components/ui/badge"
-import { OPS_PROJECTS, projectChipClass, projectSwatchClass } from "@/lib/projects"
+import { OPS_PROJECTS, projectChipClass, projectChipStyle, projectSwatchClass, projectSwatchStyle } from "@/lib/projects"
 import { cn } from "@/lib/utils"
 
 export function ProjectChip({
@@ -15,7 +15,9 @@ export function ProjectChip({
     <Badge
       variant="secondary"
       data-project={project}
+      data-testid="project-chip"
       className={cn("text-[10px] font-semibold uppercase tracking-wide border", projectChipClass(project), className)}
+      style={projectChipStyle(project)}
     >
       {project}
     </Badge>
@@ -45,6 +47,7 @@ export function ProjectPicker({
               "rounded-full border px-2 py-0.5 text-[11px] font-medium transition-colors",
               selected ? projectChipClass(project) : "border-white/15 bg-white/5 text-white/70 hover:bg-white/10 hover:text-white",
             )}
+            style={selected ? projectChipStyle(project) : undefined}
           >
             {project}
           </button>
@@ -70,6 +73,7 @@ export function ProjectLegend({ className }: { className?: string }) {
           <span
             className={cn("h-2.5 w-2.5 shrink-0 rounded-full", projectSwatchClass(project))}
             data-project-swatch={project}
+            style={projectSwatchStyle(project)}
             aria-hidden
           />
           {project}

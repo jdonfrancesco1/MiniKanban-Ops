@@ -17,6 +17,14 @@ export type OpsProjectStyle = {
   swatch: string
 }
 
+/** Hex / CSS paints so pill + left rail cannot be independently purged. */
+export type OpsProjectPaint = {
+  chip: string
+  rail: string
+  ink: string
+  border: string
+}
+
 export const OPS_PROJECT_STYLES: Record<OpsProject, OpsProjectStyle> = {
   Giant: {
     chip: "bg-blue-500 text-white border-blue-300",
@@ -58,6 +66,22 @@ export const OPS_PROJECT_STYLES: Record<OpsProject, OpsProjectStyle> = {
     bar: "bg-amber-300",
     swatch: "bg-amber-300",
   },
+}
+
+export const OPS_PROJECT_PAINT: Record<OpsProject, OpsProjectPaint> = {
+  Giant: { chip: "#3b82f6", rail: "#60a5fa", ink: "#ffffff", border: "#93c5fd" },
+  Paylyte: { chip: "#f97316", rail: "#fb923c", ink: "#ffffff", border: "#fdba74" },
+  MiniKanban: {
+    chip: "#0d9488",
+    rail: "linear-gradient(180deg, #a78bfa 0%, #2dd4bf 100%)",
+    ink: "#ffffff",
+    border: "#c4b5fd",
+  },
+  "Hangar 18": { chip: "#10b981", rail: "#34d399", ink: "#ffffff", border: "#6ee7b7" },
+  "Off Replit": { chip: "#64748b", rail: "#94a3b8", ink: "#ffffff", border: "#cbd5e1" },
+  Security: { chip: "#ef4444", rail: "#f87171", ink: "#ffffff", border: "#fca5a5" },
+  Marketing: { chip: "#d946ef", rail: "#e879f9", ink: "#ffffff", border: "#f0abfc" },
+  James: { chip: "#fbbf24", rail: "#fcd34d", ink: "#451a03", border: "#fde68a" },
 }
 
 const PROJECT_ALIASES: Record<string, OpsProject> = {
@@ -148,6 +172,43 @@ export function projectSwatchClass(project: string) {
   const known = matchOpsProject(project)
   if (known) return OPS_PROJECT_STYLES[known].swatch
   return "bg-white/40"
+}
+
+export function projectPaint(project: string | null | undefined): OpsProjectPaint | null {
+  const known = matchOpsProject(project ?? "")
+  return known ? OPS_PROJECT_PAINT[known] : null
+}
+
+export function projectChipStyle(project: string | null | undefined): { backgroundColor: string; color: string; borderColor: string } | undefined {
+  const paint = projectPaint(project)
+  if (!paint) return undefined
+  return { backgroundColor: paint.chip, color: paint.ink, borderColor: paint.border }
+}
+
+export function projectRailStyle(project: string | null | undefined): { backgroundColor?: string; backgroundImage?: string } {
+  const paint = projectPaint(project)
+  if (!paint) return { backgroundColor: "rgba(255,255,255,0.3)" }
+  if (paint.rail.includes("gradient")) return { backgroundImage: paint.rail }
+  return { backgroundColor: paint.rail }
+}
+
+export function projectSwatchStyle(project: string | null | undefined): { backgroundColor?: string; backgroundImage?: string } {
+  return projectRailStyle(project)
+}
+
+/** Known project ⇒ pill + rail paints are always a pair. */
+export function projectCardChrome(project: string | null | undefined) {
+  const known = matchOpsProject(project ?? "")
+  if (!known) return null
+  return {
+    known,
+    chipClass: OPS_PROJECT_STYLES[known].chip,
+    barClass: OPS_PROJECT_STYLES[known].bar,
+    swatchClass: OPS_PROJECT_STYLES[known].swatch,
+    paint: OPS_PROJECT_PAINT[known],
+    chipStyle: projectChipStyle(known),
+    railStyle: projectRailStyle(known),
+  }
 }
 
 /** Class tokens used only in this module — Tailwind must safelist or scan `./lib`. */

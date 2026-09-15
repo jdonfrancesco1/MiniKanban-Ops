@@ -21,7 +21,7 @@ import { useToast } from "@/hooks/use-toast"
 import { useUndo } from "@/hooks/use-undo"
 import { deleteTask, type Task } from "@/lib/db-service"
 import { cardFaceBrief } from "@/lib/card-copy"
-import { getTaskProject, projectBarClass } from "@/lib/projects"
+import { getTaskProject, projectCardChrome, projectRailStyle } from "@/lib/projects"
 import { cn } from "@/lib/utils"
 import { ProjectChip } from "./project-chip"
 import { EditorErrorBoundary } from "./editor-error-boundary"
@@ -97,6 +97,7 @@ export function KanbanCard({
   }
 
   const project = getTaskProject(task)
+  const chrome = project ? projectCardChrome(project.project) : null
   const extraLabels = (task.labels || []).filter((label) => label !== project?.project)
   const brief = cardFaceBrief(task)
   const displayTitle = project?.displayTitle || task.title
@@ -218,10 +219,15 @@ export function KanbanCard({
             if (!isDragging) setShowDetail(true)
           }}
         >
-          <span
-            aria-hidden
-            className={cn("absolute inset-y-0 left-0 w-1.5 rounded-l-md", projectBarClass(project?.project))}
-          />
+          {project ? (
+            <span
+              aria-hidden
+              data-testid="project-rail"
+              data-project-rail={chrome?.known ?? project.project}
+              className="ops-project-rail"
+              style={projectRailStyle(project.project)}
+            />
+          ) : null}
           <CardContent className="p-3 pl-4 space-y-2 overflow-visible">
             <div className="flex justify-between items-start gap-2">
               <div className="flex items-start gap-2 flex-1 min-w-0">
