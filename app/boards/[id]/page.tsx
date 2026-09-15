@@ -153,13 +153,22 @@ export default function BoardPage() {
       await loadBoardData()
       return
     }
-    await DBService.updateTask(resolvedBoardId, task.columnId, task.id, {
-      title: task.title,
-      description: task.description,
-      brief: task.brief,
-      labels: task.labels,
-    })
-    setTasks((prev) => prev.map((item) => (item.id === task.id ? { ...item, ...task } : item)))
+    try {
+      await DBService.updateTask(resolvedBoardId, task.columnId, task.id, {
+        title: task.title,
+        description: task.description,
+        brief: task.brief,
+        labels: task.labels,
+      })
+      setTasks((prev) => prev.map((item) => (item.id === task.id ? { ...item, ...task } : item)))
+    } catch (error) {
+      console.error("Error updating task:", error)
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to update task.",
+        variant: "destructive",
+      })
+    }
   }
 
   const handleTaskDelete = async (taskId: string, columnId: string) => {

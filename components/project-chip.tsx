@@ -62,8 +62,16 @@ export function ProjectLegend({ className }: { className?: string }) {
       aria-label="Project colors"
     >
       {OPS_PROJECTS.map((project) => (
-        <span key={project} className="inline-flex items-center gap-1.5 text-[11px] text-white/75">
-          <span className={cn("h-2.5 w-2.5 shrink-0 rounded-full", projectSwatchClass(project))} aria-hidden />
+        <span
+          key={project}
+          className="inline-flex items-center gap-1.5 text-[11px] text-white/75"
+          data-testid={`project-legend-${project}`}
+        >
+          <span
+            className={cn("h-2.5 w-2.5 shrink-0 rounded-full", projectSwatchClass(project))}
+            data-project-swatch={project}
+            aria-hidden
+          />
           {project}
         </span>
       ))}

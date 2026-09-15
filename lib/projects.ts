@@ -150,6 +150,19 @@ export function projectSwatchClass(project: string) {
   return "bg-white/40"
 }
 
+/** Class tokens used only in this module — Tailwind must safelist or scan `./lib`. */
+export function opsProjectTailwindSafelist(): string[] {
+  const tokens = new Set<string>()
+  for (const style of Object.values(OPS_PROJECT_STYLES)) {
+    for (const value of [style.chip, style.bar, style.swatch]) {
+      for (const token of value.split(/\s+/)) {
+        if (token) tokens.add(token)
+      }
+    }
+  }
+  return [...tokens]
+}
+
 export function upsertProjectLabel(labels: string[] | null | undefined, project: string | null | undefined) {
   const next = (labels ?? []).filter((label) => !matchOpsProject(label))
   const known = matchOpsProject(project ?? "")

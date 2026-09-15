@@ -4,6 +4,8 @@ import {
   GIANT_SMOKE_CARDS,
   briefFromDescription,
   cardFaceBrief,
+  descriptionForEditor,
+  isLocalPreviewBoard,
   matchGiantSmokeCard,
   planGiantSmokeBackfill,
 } from "./card-copy.ts"
@@ -107,5 +109,23 @@ describe("card face brief", () => {
   it("falls back to a 1–2 line description excerpt", () => {
     const brief = briefFromDescription("First sentence. Second sentence. Third should drop.")
     assert.equal(brief, "First sentence. Second sentence.")
+  })
+})
+
+describe("edit modal description + preview persist", () => {
+  it("never throws and flattens JSON blocks or HTML", () => {
+    assert.equal(descriptionForEditor(null), "")
+    assert.equal(descriptionForEditor("Plain ask."), "Plain ask.")
+    assert.equal(descriptionForEditor("<p>Do the thing.</p>"), "Do the thing.")
+    assert.equal(
+      descriptionForEditor(JSON.stringify([{ type: "paragraph", content: "From blocks", formats: {} }])),
+      "From blocks",
+    )
+    assert.equal(descriptionForEditor("{not-json"), "{not-json")
+  })
+
+  it("skips server persist on the local preview board", () => {
+    assert.equal(isLocalPreviewBoard("preview"), true)
+    assert.equal(isLocalPreviewBoard("ops"), false)
   })
 })

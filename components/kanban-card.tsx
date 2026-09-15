@@ -24,6 +24,7 @@ import { cardFaceBrief } from "@/lib/card-copy"
 import { getTaskProject, projectBarClass } from "@/lib/projects"
 import { cn } from "@/lib/utils"
 import { ProjectChip } from "./project-chip"
+import { EditorErrorBoundary } from "./editor-error-boundary"
 import { TaskDetailModal } from "./task-detail-modal"
 import { TaskEditModal } from "./task-edit-modal"
 import { StickerLayer } from "./sticker-layer"
@@ -289,6 +290,7 @@ export function KanbanCard({
             variant="ghost"
             size="icon"
             className="h-6 w-6 bg-black/30 hover:bg-black/50 text-white shadow-sm"
+            data-testid="task-edit-button"
             onClick={(e) => {
               e.stopPropagation()
               setShowEditModal(true)
@@ -318,14 +320,16 @@ export function KanbanCard({
         onEdit={() => setShowEditModal(true)}
       />
 
-      <TaskEditModal
-        open={showEditModal}
-        onOpenChange={setShowEditModal}
-        task={task}
-        boardId={boardId}
-        columnId={columnId}
-        onSave={handleTaskUpdated}
-      />
+      <EditorErrorBoundary>
+        <TaskEditModal
+          open={showEditModal}
+          onOpenChange={setShowEditModal}
+          task={task}
+          boardId={boardId}
+          columnId={columnId}
+          onSave={handleTaskUpdated}
+        />
+      </EditorErrorBoundary>
 
       {/* Delete confirmation */}
       <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>

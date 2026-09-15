@@ -142,6 +142,20 @@ export function descriptionLooksLikeHtml(value: string) {
   return /<\/?[a-z][\s\S]*>/i.test(value)
 }
 
+/** Safe value for the edit-task description field. Never throws. */
+export function descriptionForEditor(description: string | null | undefined) {
+  if (!description) return ""
+  try {
+    return stripDescriptionMarkup(description)
+  } catch {
+    return String(description)
+  }
+}
+
+export function isLocalPreviewBoard(boardId: string | null | undefined) {
+  return boardId === "preview"
+}
+
 export type SmokeBackfillPlan = {
   brief: string
   description: string
