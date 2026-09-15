@@ -1,7 +1,7 @@
 import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres"
 import { Pool } from "pg"
+import { getOpsBoardDatabaseUrl } from "./fingerprint"
 import * as schema from "./schema"
-import { getOpsBoardDatabaseUrl } from "./url"
 
 export type OpsDb = NodePgDatabase<typeof schema>
 
