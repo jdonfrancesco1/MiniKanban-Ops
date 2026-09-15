@@ -1,3 +1,38 @@
+import { createHash } from "node:crypto"
+
+/**
+ * Webpack Hash constructor: Node sha256, but skip null/undefined updates.
+ *
+ * Replit Publish (Node 20) + Next 15.5.25 still feeds `undefined` into
+ * `hash.update` while sealing chunks. That is the same payload that crashed
+ * the default WASM hasher:
+ *   TypeError: Cannot read properties of undefined (reading 'length')
+ *   at WasmHash._updateWithBuffer
+ *
+ * PR #8 switched `output.hashFunction` to the string `"sha256"`. That avoids
+ * WasmHash, but Node's hasher is stricter:
+ *   crypto.createHash("sha256").update(undefined)
+ *   → TypeError [ERR_INVALID_ARG_TYPE]: The "data" argument must be of type
+ *     string or an instance of Buffer, TypedArray, or DataView. Received undefined
+ *
+ * A custom webpack() also keeps Next 15.5 from forking the webpack build worker.
+ */
+class SafeSha256Hash {
+  constructor() {
+    this._hash = createHash("sha256")
+  }
+
+  update(data, inputEncoding) {
+    if (data == null) return this
+    this._hash.update(data, inputEncoding)
+    return this
+  }
+
+  digest(encoding) {
+    return this._hash.digest(encoding)
+  }
+}
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   typescript: {
@@ -6,14 +41,8 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
-  // Replit Publish (Node 20) crashes Next 15.5.25's default webpack WASM hasher:
-  //   TypeError: Cannot read properties of undefined (reading 'length')
-  //   at WasmHash._updateWithBuffer (.../next/dist/compiled/webpack/bundle5.js)
-  //   → "Next.js build worker exited with code: 1 and signal: null"
-  // sha256 uses Node crypto (not WasmHash). A custom webpack() also disables
-  // the forked webpack build worker in Next 15.5 (see webpackBuildWorker).
   webpack: (config) => {
-    config.output.hashFunction = "sha256"
+    config.output.hashFunction = SafeSha256Hash
     return config
   },
 }
