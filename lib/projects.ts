@@ -231,3 +231,27 @@ export function upsertProjectLabel(labels: string[] | null | undefined, project:
   else if (project?.trim()) next.unshift(project.trim())
   return Array.from(new Set(next))
 }
+
+export type ProjectFilterValue = "all" | OpsProject
+
+export type TaskProjectSource = {
+  title: string
+  labels?: string[] | null
+  project?: string | null
+}
+
+export function parseProjectFilter(value: string | null | undefined): ProjectFilterValue {
+  return matchOpsProject(value) ?? "all"
+}
+
+export function taskMatchesProjectFilter(task: TaskProjectSource, filter: string | null | undefined): boolean {
+  const selected = parseProjectFilter(filter)
+  if (selected === "all") return true
+  const found = getTaskProject(task)
+  if (!found) return false
+  return matchOpsProject(found.project) === selected || normalizeProjectName(found.project) === normalizeProjectName(selected)
+}
+
+export function filterTasksByProject<T extends TaskProjectSource>(tasks: T[], filter: string | null | undefined): T[] {
+  return tasks.filter((task) => taskMatchesProjectFilter(task, filter))
+}

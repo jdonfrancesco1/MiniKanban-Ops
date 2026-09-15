@@ -4,11 +4,14 @@ import { describe, it } from "node:test"
 import { extractTasksFromBoard, type Board } from "./types.ts"
 import {
   OPS_PROJECTS,
+  filterTasksByProject,
   getTaskProject,
   matchOpsProject,
   opsProjectTailwindSafelist,
+  parseProjectFilter,
   parseProjectPrefix,
   projectBarClass,
+  taskMatchesProjectFilter,
   projectCardChrome,
   projectChipClass,
   projectPaint,
@@ -103,6 +106,35 @@ describe("project prefix and labels", () => {
     assert.equal(chrome?.known, "Security")
     assert.equal(chrome?.paint.chip, "#ef4444")
     assert.equal(chrome?.paint.rail, "#f87171")
+  })
+
+  it("filters cards by the same project resolver as the chip", () => {
+    const tasks = [
+      { id: "1", title: "[Giant] Daily brief", labels: [] },
+      { id: "2", title: "Wire x402", labels: ["Paylyte"] },
+      { id: "3", title: "No project yet", labels: [] },
+      { id: "4", title: "Review the ask", labels: ["Marketing"], project: "James" },
+    ]
+
+    assert.equal(parseProjectFilter(null), "all")
+    assert.equal(parseProjectFilter("paylyte"), "Paylyte")
+    assert.equal(parseProjectFilter("unknown"), "all")
+
+    assert.equal(filterTasksByProject(tasks, "all").length, 4)
+    assert.deepEqual(
+      filterTasksByProject(tasks, "Giant").map((task) => task.id),
+      ["1"],
+    )
+    assert.deepEqual(
+      filterTasksByProject(tasks, "Paylyte").map((task) => task.id),
+      ["2"],
+    )
+    assert.deepEqual(
+      filterTasksByProject(tasks, "James").map((task) => task.id),
+      ["4"],
+    )
+    assert.equal(taskMatchesProjectFilter(tasks[2], "Giant"), false)
+    assert.equal(taskMatchesProjectFilter(tasks[2], "all"), true)
   })
 
   it("safelists every project chip, bar, and swatch class token", () => {
