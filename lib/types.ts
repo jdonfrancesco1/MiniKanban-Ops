@@ -15,6 +15,8 @@ export type Task = {
   id: string
   title: string
   description: string
+  /** 1–2 line card-face summary. Full ask lives in `description`. */
+  brief?: string | null
   labels: string[]
   stickers?: PlacedSticker[]
   createdAt?: string
@@ -154,6 +156,7 @@ export type OpsApiTask = {
   id: string
   title: string
   description: string
+  brief?: string | null
   labels: string[]
   order: number
   columnId: string
@@ -192,6 +195,7 @@ function mapApiTask(task: OpsApiTask, columnId: string, boardId: string): Task {
     id: String(task.id),
     title: task.title,
     description: task.description ?? "",
+    brief: task.brief ?? "",
     labels: Array.isArray(task.labels) ? task.labels : [],
     order: task.order ?? 0,
     columnId: String(task.columnId || columnId),

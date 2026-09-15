@@ -38,6 +38,7 @@ type TaskEditModalProps = {
 
 export function TaskEditModal({ open, onOpenChange, task, boardId, columnId, onSave }: TaskEditModalProps) {
   const [title, setTitle] = useState(task.title)
+  const [brief, setBrief] = useState(task.brief ?? "")
   const [description, setDescription] = useState("") // This will be HTML string for Quill
   const [labels, setLabels] = useState<string[]>([])
   const [newLabel, setNewLabel] = useState("")
@@ -47,6 +48,7 @@ export function TaskEditModal({ open, onOpenChange, task, boardId, columnId, onS
   useEffect(() => {
     if (open) {
       setTitle(task.title)
+      setBrief(task.brief ?? "")
       let quillDescription = ""
       if (task.description) {
         try {
@@ -85,6 +87,7 @@ export function TaskEditModal({ open, onOpenChange, task, boardId, columnId, onS
     try {
       const updates: Partial<Omit<Task, "id" | "createdAt" | "createdBy">> = {
         title,
+        brief,
         description, // Description from Quill is HTML
         labels,
         // boardId and columnId are not part of 'updates' for DBService.updateTask, they are separate params
@@ -175,8 +178,22 @@ export function TaskEditModal({ open, onOpenChange, task, boardId, columnId, onS
           </div>
 
           <div className="grid gap-2">
+            <Label htmlFor="brief" className="dark:text-neutral-300">
+              Brief (shown on the card, 1–2 lines)
+            </Label>
+            <Input
+              id="brief"
+              value={brief}
+              onChange={(e) => setBrief(e.target.value)}
+              placeholder="What James should do, in one glance"
+              disabled={isLoading}
+              className="dark:bg-neutral-800 dark:border-neutral-700 dark:text-white dark:placeholder:text-neutral-500"
+            />
+          </div>
+
+          <div className="grid gap-2">
             <Label htmlFor="description" className="dark:text-neutral-300">
-              Description
+              Description (full ask)
             </Label>
             <div className="h-[200px] bg-background dark:bg-neutral-800 rounded-md quill-container-dark">
               {typeof window !== "undefined" && (

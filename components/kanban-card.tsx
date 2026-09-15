@@ -20,10 +20,11 @@ import {
 import { useToast } from "@/hooks/use-toast"
 import { useUndo } from "@/hooks/use-undo"
 import { deleteTask, type Task } from "@/lib/db-service"
-import { getTaskProject } from "@/lib/projects"
+import { cardFaceBrief } from "@/lib/card-copy"
+import { getTaskProject, projectBarClass } from "@/lib/projects"
 import { cn } from "@/lib/utils"
-import { FormattedDescription } from "./formatted-description"
 import { ProjectChip } from "./project-chip"
+import { TaskDetailModal } from "./task-detail-modal"
 import { TaskEditModal } from "./task-edit-modal"
 import { StickerLayer } from "./sticker-layer"
 import { useMobile } from "@/hooks/use-mobile"
@@ -56,6 +57,7 @@ export function KanbanCard({
 }: KanbanCardProps) {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [showDetail, setShowDetail] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
   const [showDragTooltip, setShowDragTooltip] = useState(false)
   const taskRef = useRef<HTMLDivElement>(null)
@@ -93,9 +95,10 @@ export function KanbanCard({
     scale: isDragging ? 1.02 : 1,
   }
 
-  const hasDescription = !!task.description && task.description.trim() !== ""
   const project = getTaskProject(task)
   const extraLabels = (task.labels || []).filter((label) => label !== project?.project)
+  const brief = cardFaceBrief(task)
+  const displayTitle = project?.displayTitle || task.title
 
   // Handle delete task
   const handleDeleteTask = async () => {
@@ -200,55 +203,46 @@ export function KanbanCard({
           }}
           style={style}
           className={cn(
-            "cursor-grab active:cursor-grabbing relative transition-all duration-200",
-            "glassmorphic-card",
+            "cursor-grab active:cursor-grabbing relative transition-all duration-200 overflow-visible",
+            "glassmorphic-card border-l-4",
+            projectBarClass(project?.project),
             isDragging && "shadow-lg ring-2 ring-white/20",
             isDropTarget && "ring-2 ring-white/50 ring-offset-2 bg-white/5",
             "hover:shadow-md",
-            className, // Add the className prop for column-specific gradient
+            className,
           )}
           data-task-id={task.id}
           data-column-id={columnId}
+          data-testid="ops-task-card"
+          onClick={() => {
+            if (!isDragging) setShowDetail(true)
+          }}
           {...attributes}
           {...listeners}
         >
-          <CardContent className="p-3 space-y-2">
+          <CardContent className="p-3 space-y-2 overflow-visible">
             <div className="flex justify-between items-start gap-2">
-              <div className="flex items-start gap-2 flex-1">
+              <div className="flex items-start gap-2 flex-1 min-w-0">
                 <div
                   className={cn(
-                    "mt-0.5 p-1 rounded text-white/70",
+                    "mt-0.5 p-1 rounded text-white/70 shrink-0",
                     "group-hover:bg-white/10 group-hover:text-white transition-colors",
                     isDragging && "bg-white/10 text-white",
                   )}
                 >
-                  {/* Show GripVertical icon to indicate dragging handle */}
                   <GripVertical className="h-4 w-4" />
                 </div>
                 <div className="flex-1 min-w-0 space-y-1.5">
                   {project ? <ProjectChip project={project.project} /> : null}
-                  <h4 className="text-sm font-medium leading-tight text-white">
-                    {project?.displayTitle || task.title}
-                  </h4>
+                  <h4 className="text-sm font-medium leading-snug text-white break-words">{displayTitle}</h4>
+                  {brief ? (
+                    <p className="text-xs leading-snug text-white/75 line-clamp-2 break-words" data-testid="task-brief">
+                      {brief}
+                    </p>
+                  ) : null}
                 </div>
               </div>
             </div>
-
-            {hasDescription && (
-              <div
-                onClick={(e) => {
-                  e.stopPropagation() // Prevent drag when clicking on description
-                  setShowEditModal(true)
-                }}
-                className="ml-6 cursor-pointer hover:bg-white/10 rounded p-1 -m-1 transition-colors"
-              >
-                <FormattedDescription
-                  description={task.description}
-                  collapsible={false}
-                  className="p-0 border-0 bg-transparent text-white/80"
-                />
-              </div>
-            )}
 
             {extraLabels.length > 0 && (
               <div className="flex flex-wrap gap-1 ml-6">
@@ -313,7 +307,13 @@ export function KanbanCard({
         </div>
       </div>
 
-      {/* Edit Modal */}
+      <TaskDetailModal
+        open={showDetail}
+        onOpenChange={setShowDetail}
+        task={task}
+        onEdit={() => setShowEditModal(true)}
+      />
+
       <TaskEditModal
         open={showEditModal}
         onOpenChange={setShowEditModal}

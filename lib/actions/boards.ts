@@ -15,6 +15,7 @@ import {
   pickCanonicalOpsBoard,
   planOpsTaskPlacements,
 } from "@/lib/db/reconcile-ops"
+import { planGiantSmokeBackfill } from "@/lib/card-copy"
 import { requireOpsSession } from "@/lib/auth/session"
 import { toFlightSafeBoard, type Board, type BoardSummary, type Column, type Task } from "@/lib/types"
 
@@ -57,6 +58,7 @@ function mapTask(row: TaskRow): Task {
     id: String(row.id),
     title: row.title,
     description: row.description ?? "",
+    brief: row.brief ?? "",
     labels: mapLabels(row.labels),
     stickers: [],
     createdAt: toIso(row.createdAt),
@@ -271,10 +273,48 @@ async function reconcileOpsTasks(opsBoardId: string) {
       adopted: visibleOnOps === 0,
     })
   }
+
+  await backfillGiantSmokeCopy()
 }
 
 async function touchBoard(boardId: string) {
   await db.update(boards).set({ updatedAt: now() }).where(eq(boards.id, boardId))
+}
+
+export async function ensureTaskBriefColumn() {
+  await db.execute(sql`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS brief text`)
+}
+
+export async function backfillGiantSmokeCopy() {
+  await ensureTaskBriefColumn()
+  const rows = await db.select().from(tasks)
+  let updated = 0
+
+  for (const row of rows) {
+    const plan = planGiantSmokeBackfill({
+      title: row.title,
+      brief: row.brief,
+      description: row.description,
+      labels: mapLabels(row.labels),
+    })
+    if (!plan) continue
+
+    await db
+      .update(tasks)
+      .set({
+        brief: plan.brief,
+        description: plan.description,
+        labels: plan.labels,
+        updatedAt: now(),
+      })
+      .where(eq(tasks.id, row.id))
+    updated += 1
+  }
+
+  if (updated > 0) {
+    console.info("[ops] backfilled Giant smoke card copy", { updated })
+  }
+  return updated
 }
 
 export async function ensureDefaultBoard(): Promise<Board> {
@@ -299,6 +339,8 @@ export async function ensureDefaultBoard(): Promise<Board> {
       taskCount: countByBoard.get(String(board.id)) ?? 0,
     })),
   )
+
+  await ensureTaskBriefColumn()
 
   if (canonical) {
     if (canonical.slug !== DEFAULT_BOARD_SLUG) {
@@ -514,6 +556,7 @@ export async function restoreColumn(boardId: string, column: Column) {
       columnId: column.id,
       title: task.title,
       description: task.description ?? "",
+      brief: task.brief ?? "",
       labels: task.labels ?? [],
       order: task.order ?? index,
       archivedAt: null,
@@ -554,14 +597,23 @@ export async function addTask(
 
   const nextOrder = existing.length === 0 ? 0 : existing[existing.length - 1].order + 1
 
+  const title = task.title.trim() || "Untitled"
+  const smoke = planGiantSmokeBackfill({
+    title,
+    brief: task.brief,
+    description: task.description,
+    labels: task.labels,
+  })
+
   const [created] = await db
     .insert(tasks)
     .values({
       boardId,
       columnId,
-      title: task.title.trim() || "Untitled",
-      description: task.description ?? "",
-      labels: task.labels ?? [],
+      title,
+      description: smoke?.description ?? task.description ?? "",
+      brief: smoke?.brief ?? task.brief ?? "",
+      labels: smoke?.labels ?? task.labels ?? [],
       order: nextOrder,
     })
     .returning()
@@ -593,6 +645,7 @@ export async function updateTask(
     .set({
       title: updates.title ?? existing.title,
       description: updates.description ?? existing.description,
+      brief: updates.brief !== undefined ? updates.brief : existing.brief,
       labels: updates.labels ?? existing.labels,
       columnId: nextColumnId,
       updatedAt: now(),
@@ -648,6 +701,7 @@ export async function restoreTask(boardId: string, columnIdOrTaskId: string, tas
       columnId: preferredColumnId || columnIdOrTaskId,
       title: task.title,
       description: task.description ?? "",
+      brief: task.brief ?? "",
       labels: task.labels ?? [],
       order: task.order ?? 0,
       archivedAt: null,

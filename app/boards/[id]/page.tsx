@@ -20,6 +20,7 @@ import {
   type OpsBoardDiagnostics,
 } from "@/lib/ops-board"
 import { Button } from "@/components/ui/button"
+import { ProjectLegend } from "@/components/project-chip"
 import { Loader2, LogOut } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 
@@ -139,6 +140,7 @@ export default function BoardPage() {
     const newTask = await DBService.addTask(resolvedBoardId, columnId, {
       title: taskData.title || "Untitled",
       description: taskData.description || "",
+      brief: taskData.brief || "",
       labels: taskData.labels || [],
     })
     if (newTask) {
@@ -154,6 +156,7 @@ export default function BoardPage() {
     await DBService.updateTask(resolvedBoardId, task.columnId, task.id, {
       title: task.title,
       description: task.description,
+      brief: task.brief,
       labels: task.labels,
     })
     setTasks((prev) => prev.map((item) => (item.id === task.id ? { ...item, ...task } : item)))
@@ -200,9 +203,9 @@ export default function BoardPage() {
   }
 
   return (
-    <div className="flex flex-col h-screen bg-[#1a0b2e] text-white">
-      <header className="flex items-center justify-between p-4 border-b border-white/10 bg-[#1a0b2e]">
-        <div>
+    <div className="flex flex-col h-screen overflow-hidden bg-[#1a0b2e] text-white">
+      <header className="flex items-center justify-between gap-4 p-4 border-b border-white/10 bg-[#1a0b2e] shrink-0">
+        <div className="min-w-0">
           <p className="text-xs uppercase tracking-[0.2em] text-pink-300">James ↔ Orca</p>
           <h1 className="text-xl font-semibold truncate" title={board.title}>
             {board.title}
@@ -218,8 +221,9 @@ export default function BoardPage() {
                 : ""}
             </p>
           ) : null}
+          <ProjectLegend className="mt-2" />
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           <Button variant="ghost" className="text-white/70 hover:text-white hover:bg-white/10" onClick={() => void logout()}>
             <LogOut className="h-4 w-4 mr-2" />
             Sign out
@@ -227,7 +231,7 @@ export default function BoardPage() {
         </div>
       </header>
 
-      <div className="flex-1 overflow-auto">
+      <div className="flex-1 min-h-0 overflow-hidden">
         <KanbanBoardComponent
           boardId={resolvedBoardId}
           columns={columns}

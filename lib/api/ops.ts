@@ -22,6 +22,7 @@ export function serializeOpsTask(task: Task): OpsApiTask {
     id: task.id,
     title: task.title,
     description: task.description ?? "",
+    brief: task.brief ?? "",
     labels: Array.isArray(task.labels) ? task.labels : [],
     order: task.order ?? 0,
     columnId: task.columnId ?? "",
@@ -115,7 +116,13 @@ export async function getOpsDiagnosticsPayload() {
   return { diagnostics: buildOpsDiagnostics(board) }
 }
 
-export async function createOpsTask(input: { title: string; columnTitle?: string; labels?: string[] }) {
+export async function createOpsTask(input: {
+  title: string
+  columnTitle?: string
+  labels?: string[]
+  brief?: string
+  description?: string
+}) {
   await requireOpsApi()
   const title = input.title.trim()
   if (!title) {
@@ -135,7 +142,8 @@ export async function createOpsTask(input: { title: string; columnTitle?: string
 
   const task = await addTask(board.id, column.id, {
     title,
-    description: "",
+    description: input.description ?? "",
+    brief: input.brief ?? "",
     labels,
     columnId: column.id,
     boardId: board.id,
@@ -177,14 +185,15 @@ export async function moveOpsTask(
 
 export async function patchOpsTask(
   taskId: string,
-  input: { title?: string; description?: string },
+  input: { title?: string; description?: string; brief?: string },
 ) {
   await requireOpsApi()
   const title = input.title?.trim()
   const hasTitle = typeof input.title === "string"
   const hasDescription = typeof input.description === "string"
-  if (!hasTitle && !hasDescription) {
-    throw new Error("title or description is required")
+  const hasBrief = typeof input.brief === "string"
+  if (!hasTitle && !hasDescription && !hasBrief) {
+    throw new Error("title, description, or brief is required")
   }
   if (hasTitle && !title) {
     throw new Error("Title is required")
@@ -199,6 +208,7 @@ export async function patchOpsTask(
   const result = await updateTask(board.id, existing.columnId, taskId, {
     ...(hasTitle ? { title } : {}),
     ...(hasDescription ? { description: input.description } : {}),
+    ...(hasBrief ? { brief: input.brief } : {}),
   })
   if (!result.success) {
     throw new Error(result.error || "Task not found")
