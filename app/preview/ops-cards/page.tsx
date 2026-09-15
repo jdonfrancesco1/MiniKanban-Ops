@@ -4,48 +4,9 @@ import { DndContext, PointerSensor, useSensor, useSensors } from "@dnd-kit/core"
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable"
 import { KanbanCard } from "@/components/kanban-card"
 import { ProjectLegend } from "@/components/project-chip"
-import { GIANT_SMOKE_CARDS } from "@/lib/card-copy"
-import type { Task } from "@/lib/types"
+import { buildOpsCardPreviewTasks } from "@/lib/preview-ops-cards"
 
-function titleCaseHint(hint: string) {
-  return hint
-    .split(" ")
-    .map((word) => (word ? word[0].toUpperCase() + word.slice(1) : word))
-    .join(" ")
-}
-
-const previewTasks: Task[] = [
-  ...GIANT_SMOKE_CARDS.map((card, index) => ({
-    id: card.id,
-    title: `[Giant] ${titleCaseHint(card.titleHints[0])}`,
-    brief: card.brief,
-    description: card.description,
-    labels: ["Giant"],
-    columnId: "need-you",
-    boardId: "preview",
-    order: index,
-  })),
-  {
-    id: "paylyte",
-    title: "[Paylyte] Wire x402 checkout",
-    brief: "Confirm the live offering still charges over x402.",
-    description: "Open the Paylyte live offering, complete a test buy over x402, and note PASS or the exact fail.",
-    labels: ["Paylyte"],
-    columnId: "need-you",
-    boardId: "preview",
-    order: 20,
-  },
-  {
-    id: "james",
-    title: "[James] Review Friday asks",
-    brief: "Read each Need you card and mark PASS or fail.",
-    description: "Open every Need you card. For each, do the ask in the description and reply PASS or a fail note.",
-    labels: ["James"],
-    columnId: "need-you",
-    boardId: "preview",
-    order: 21,
-  },
-]
+const previewTasks = buildOpsCardPreviewTasks()
 
 export default function OpsCardPreviewPage() {
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }))

@@ -17,6 +17,7 @@ import {
 } from "@/lib/db/reconcile-ops"
 import { planGiantSmokeBackfill } from "@/lib/card-copy"
 import { requireOpsSession } from "@/lib/auth/session"
+import { isMissingRelationColumnError } from "@/lib/db/errors"
 import { toFlightSafeBoard, type Board, type BoardSummary, type Column, type Task } from "@/lib/types"
 
 function now() {
@@ -88,11 +89,13 @@ async function loadBoard(boardId: string): Promise<Board | null> {
     .where(eq(columns.boardId, board.id))
     .orderBy(asc(columns.order), asc(columns.createdAt))
 
-  const taskRows = await db
-    .select()
-    .from(tasks)
-    .where(eq(tasks.boardId, board.id))
-    .orderBy(asc(tasks.order), asc(tasks.createdAt))
+  const taskRows = await withTaskBriefColumn(() =>
+    db
+      .select()
+      .from(tasks)
+      .where(eq(tasks.boardId, board.id))
+      .orderBy(asc(tasks.order), asc(tasks.createdAt)),
+  )
 
   const columnIds = new Set(columnRows.map((column) => String(column.id)))
   const fallbackColumnId = columnRows[0] ? String(columnRows[0].id) : null
@@ -283,6 +286,16 @@ async function touchBoard(boardId: string) {
 
 export async function ensureTaskBriefColumn() {
   await db.execute(sql`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS brief text`)
+}
+
+async function withTaskBriefColumn<T>(run: () => Promise<T>): Promise<T> {
+  try {
+    return await run()
+  } catch (error) {
+    if (!isMissingRelationColumnError(error, "brief")) throw error
+    await ensureTaskBriefColumn()
+    return await run()
+  }
 }
 
 export async function backfillGiantSmokeCopy() {
@@ -630,27 +643,31 @@ export async function updateTask(
 ) {
   await requireOpsSession()
 
-  const [existing] = await db
-    .select()
-    .from(tasks)
-    .where(and(eq(tasks.id, taskId), eq(tasks.boardId, boardId)))
-    .limit(1)
+  const [existing] = await withTaskBriefColumn(() =>
+    db
+      .select()
+      .from(tasks)
+      .where(and(eq(tasks.id, taskId), eq(tasks.boardId, boardId)))
+      .limit(1),
+  )
 
   if (!existing) return { success: false, error: "Task not found" }
 
   const nextColumnId = updates.columnId && updates.columnId !== existing.columnId ? updates.columnId : existing.columnId
 
-  await db
-    .update(tasks)
-    .set({
-      title: updates.title ?? existing.title,
-      description: updates.description ?? existing.description,
-      brief: updates.brief !== undefined ? updates.brief : existing.brief,
-      labels: updates.labels ?? existing.labels,
-      columnId: nextColumnId,
-      updatedAt: now(),
-    })
-    .where(eq(tasks.id, taskId))
+  await withTaskBriefColumn(() =>
+    db
+      .update(tasks)
+      .set({
+        title: updates.title ?? existing.title,
+        description: updates.description ?? existing.description,
+        brief: updates.brief !== undefined ? updates.brief : existing.brief,
+        labels: updates.labels ?? existing.labels,
+        columnId: nextColumnId,
+        updatedAt: now(),
+      })
+      .where(eq(tasks.id, taskId)),
+  )
 
   await touchBoard(boardId)
   void columnId

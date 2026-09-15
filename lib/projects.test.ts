@@ -1,7 +1,20 @@
 import assert from "node:assert/strict"
+import { readFileSync } from "node:fs"
 import { describe, it } from "node:test"
 import { extractTasksFromBoard, type Board } from "./types.ts"
-import { getTaskProject, matchOpsProject, parseProjectPrefix, projectBarClass, upsertProjectLabel } from "./projects.ts"
+import {
+  OPS_PROJECTS,
+  getTaskProject,
+  matchOpsProject,
+  opsProjectTailwindSafelist,
+  parseProjectPrefix,
+  projectBarClass,
+  projectCardChrome,
+  projectChipClass,
+  projectPaint,
+  projectRailStyle,
+  upsertProjectLabel,
+} from "./projects.ts"
 
 describe("project prefix and labels", () => {
   it("parses [Project] and Project: title conventions", () => {
@@ -47,6 +60,71 @@ describe("project prefix and labels", () => {
     assert.equal(projectBarClass("Security"), "bg-red-400")
     assert.equal(projectBarClass("Marketing"), "bg-fuchsia-400")
     assert.equal(projectBarClass("James"), "bg-amber-300")
+  })
+
+  it("colors [Marketing] and [Security] title prefixes", () => {
+    const marketing = getTaskProject({ title: "[Marketing] Launch Friday note", labels: [] })
+    const security = getTaskProject({ title: "[Security] Rotate ops secrets", labels: [] })
+    assert.equal(marketing?.known, "Marketing")
+    assert.equal(security?.known, "Security")
+    assert.equal(projectChipClass("Marketing"), "bg-fuchsia-500 text-white border-fuchsia-300")
+    assert.equal(projectChipClass("Security"), "bg-red-500 text-white border-red-300")
+  })
+
+  it("tells Tailwind to scan lib so project color strings are not purged", () => {
+    const config = readFileSync(new URL("../tailwind.config.ts", import.meta.url), "utf8")
+    assert.match(config, /\.\/lib\/\*\*\/\*\.\{ts,tsx\}/)
+    assert.match(config, /safelist:\s*opsProjectTailwindSafelist\(\)/)
+  })
+
+  it("pairs a pill paint with a left rail for every known project", () => {
+    for (const project of OPS_PROJECTS) {
+      const chrome = projectCardChrome(project)
+      assert.ok(chrome, `${project} must have card chrome`)
+      assert.equal(chrome.known, project)
+      assert.ok(chrome.paint.chip, `${project} missing chip paint`)
+      assert.ok(chrome.paint.rail, `${project} missing rail paint`)
+      assert.ok(chrome.chipStyle?.backgroundColor, `${project} missing chip style`)
+      const rail = projectRailStyle(project)
+      assert.ok(rail.backgroundColor || rail.backgroundImage, `${project} missing rail style`)
+    }
+    assert.equal(projectPaint("Security")?.rail, "#f87171")
+    assert.equal(projectPaint("Paylyte")?.rail, "#fb923c")
+    assert.equal(projectPaint("Marketing")?.chip, "#d946ef")
+  })
+
+  it("gives James's Security-labeled card both pill and rail paints", () => {
+    const found = getTaskProject({
+      title: "BigMofo standing watch — Paylyte/Giant auth+payments",
+      labels: ["Security"],
+    })
+    assert.equal(found?.known, "Security")
+    const chrome = projectCardChrome(found?.project)
+    assert.equal(chrome?.known, "Security")
+    assert.equal(chrome?.paint.chip, "#ef4444")
+    assert.equal(chrome?.paint.rail, "#f87171")
+  })
+
+  it("safelists every project chip, bar, and swatch class token", () => {
+    const safelist = opsProjectTailwindSafelist()
+    for (const token of [
+      "bg-fuchsia-500",
+      "border-fuchsia-300",
+      "bg-fuchsia-400",
+      "bg-red-500",
+      "border-red-300",
+      "bg-red-400",
+      "bg-blue-500",
+      "bg-orange-500",
+      "bg-teal-600",
+      "bg-emerald-500",
+      "bg-slate-500",
+      "bg-amber-400",
+      "from-violet-400",
+      "to-teal-400",
+    ]) {
+      assert.ok(safelist.includes(token), `missing safelist token ${token}`)
+    }
   })
 })
 
