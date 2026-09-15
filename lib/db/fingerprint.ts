@@ -1,3 +1,5 @@
+import { getOpsBoardDatabaseUrl } from "./url"
+
 export type DatabaseFingerprint = {
   dbHostSuffix: string
   dbName: string
@@ -26,7 +28,8 @@ function hostSuffix(hostname: string) {
 }
 
 /**
- * Non-secret view of DATABASE_URL: last host labels + database name.
+ * Non-secret view of the ops board URL: last host labels + database name.
+ * Uses the same OPS_BOARD_DATABASE_URL → DATABASE_URL preference as getDb.
  * Never returns user, password, port, query string, or the full hostname.
  */
 export function fingerprintDatabaseUrl(connectionString: string | undefined | null): DatabaseFingerprint {
@@ -47,5 +50,5 @@ export function fingerprintDatabaseUrl(connectionString: string | undefined | nu
 }
 
 export function fingerprintProcessDatabase(): DatabaseFingerprint {
-  return fingerprintDatabaseUrl(process.env.DATABASE_URL)
+  return fingerprintDatabaseUrl(getOpsBoardDatabaseUrl())
 }
