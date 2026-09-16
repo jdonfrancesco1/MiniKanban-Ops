@@ -46,15 +46,26 @@ describe("project prefix and labels", () => {
   })
 
   it("uses a project field when present", () => {
-    const found = getTaskProject({ title: "Review the ask", labels: ["Marketing"], project: "James" })
-    assert.equal(found?.project, "James")
+    const found = getTaskProject({ title: "Review the ask", labels: ["Marketing"], project: "Jimbo" })
+    assert.equal(found?.project, "Jimbo")
     assert.equal(found?.source, "field")
     assert.equal(found?.displayTitle, "Review the ask")
   })
 
+  it("resolves a legacy James project field or label to Jimbo", () => {
+    const fromField = getTaskProject({ title: "Review the ask", labels: ["Marketing"], project: "James" })
+    assert.equal(fromField?.project, "Jimbo")
+    assert.equal(fromField?.known, "Jimbo")
+    const fromLabel = getTaskProject({ title: "[James] Review Friday asks", labels: ["James"] })
+    assert.equal(fromLabel?.project, "Jimbo")
+    assert.equal(fromLabel?.known, "Jimbo")
+    assert.equal(fromLabel?.displayTitle, "Review Friday asks")
+  })
+
   it("maps locked project colors and aliases", () => {
     assert.equal(matchOpsProject("Off Replit/CF"), "Off Replit")
-    assert.equal(matchOpsProject("James"), "James")
+    assert.equal(matchOpsProject("Jimbo"), "Jimbo")
+    assert.equal(matchOpsProject("James"), "Jimbo")
     assert.equal(projectBarClass("Giant"), "bg-blue-400")
     assert.equal(projectBarClass("Paylyte"), "bg-orange-400")
     assert.equal(projectBarClass("MiniKanban"), "bg-gradient-to-b from-violet-400 to-teal-400")
@@ -62,6 +73,7 @@ describe("project prefix and labels", () => {
     assert.equal(projectBarClass("Off Replit"), "bg-slate-400")
     assert.equal(projectBarClass("Security"), "bg-red-400")
     assert.equal(projectBarClass("Marketing"), "bg-fuchsia-400")
+    assert.equal(projectBarClass("Jimbo"), "bg-amber-300")
     assert.equal(projectBarClass("James"), "bg-amber-300")
   })
 
@@ -118,6 +130,8 @@ describe("project prefix and labels", () => {
 
     assert.equal(parseProjectFilter(null), "all")
     assert.equal(parseProjectFilter("paylyte"), "Paylyte")
+    assert.equal(parseProjectFilter("jimbo"), "Jimbo")
+    assert.equal(parseProjectFilter("james"), "Jimbo")
     assert.equal(parseProjectFilter("unknown"), "all")
 
     assert.equal(filterTasksByProject(tasks, "all").length, 4)
@@ -128,6 +142,10 @@ describe("project prefix and labels", () => {
     assert.deepEqual(
       filterTasksByProject(tasks, "Paylyte").map((task) => task.id),
       ["2"],
+    )
+    assert.deepEqual(
+      filterTasksByProject(tasks, "Jimbo").map((task) => task.id),
+      ["4"],
     )
     assert.deepEqual(
       filterTasksByProject(tasks, "James").map((task) => task.id),
