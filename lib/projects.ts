@@ -6,7 +6,7 @@ export const OPS_PROJECTS = [
   "Off Replit",
   "Security",
   "Marketing",
-  "James",
+  "Jimbo",
 ] as const
 
 export type OpsProject = (typeof OPS_PROJECTS)[number]
@@ -61,7 +61,7 @@ export const OPS_PROJECT_STYLES: Record<OpsProject, OpsProjectStyle> = {
     bar: "bg-fuchsia-400",
     swatch: "bg-fuchsia-400",
   },
-  James: {
+  Jimbo: {
     chip: "bg-amber-400 text-amber-950 border-amber-200",
     bar: "bg-amber-300",
     swatch: "bg-amber-300",
@@ -81,13 +81,14 @@ export const OPS_PROJECT_PAINT: Record<OpsProject, OpsProjectPaint> = {
   "Off Replit": { chip: "#64748b", rail: "#94a3b8", ink: "#ffffff", border: "#cbd5e1" },
   Security: { chip: "#ef4444", rail: "#f87171", ink: "#ffffff", border: "#fca5a5" },
   Marketing: { chip: "#d946ef", rail: "#e879f9", ink: "#ffffff", border: "#f0abfc" },
-  James: { chip: "#fbbf24", rail: "#fcd34d", ink: "#451a03", border: "#fde68a" },
+  Jimbo: { chip: "#fbbf24", rail: "#fcd34d", ink: "#451a03", border: "#fde68a" },
 }
 
 const PROJECT_ALIASES: Record<string, OpsProject> = {
   "off replit/cf": "Off Replit",
   "off replit": "Off Replit",
   "hangar18": "Hangar 18",
+  james: "Jimbo",
 }
 
 const PREFIX_RE = /^\s*(?:\[([^\]]+)\]|([^:–—\-/]+)\s*(?::|–|—|-|\/))\s*(.+)$/

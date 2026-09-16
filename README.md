@@ -223,7 +223,7 @@ After Autoscale publishes this revision, Orca should AddMcpServer against that U
 
 Local: `http://localhost:3000/mcp` with the same Bearer header.
 
-Card face: project chip · decoded title · brief · muted `Created Sep 14`. Done cards also show `Completed Sep 15`. Dates use America/New_York short format (detail/edit: `Sep 15, 2026`). Click opens the full description. Columns scroll so card bottoms are not clipped. Project colors: Giant blue, Paylyte orange, MiniKanban purple/teal, Hangar 18 green, Off Replit slate, Security red, Marketing magenta, James gold.
+Card face: project chip · decoded title · brief · muted `Created Sep 14`. Done cards also show `Completed Sep 15`. Dates use America/New_York short format (detail/edit: `Sep 15, 2026`). Click opens the full description. Columns scroll so card bottoms are not clipped. Project colors: Giant blue, Paylyte orange, MiniKanban purple/teal, Hangar 18 green, Off Replit slate, Security red, Marketing magenta, Jimbo gold.
 
 ## Out of scope
 
