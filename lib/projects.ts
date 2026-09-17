@@ -7,6 +7,8 @@ export const OPS_PROJECTS = [
   "Security",
   "Marketing",
   "Jimbo",
+  "Maven",
+  "Orca",
 ] as const
 
 export type OpsProject = (typeof OPS_PROJECTS)[number]
@@ -66,6 +68,16 @@ export const OPS_PROJECT_STYLES: Record<OpsProject, OpsProjectStyle> = {
     bar: "bg-amber-300",
     swatch: "bg-amber-300",
   },
+  Maven: {
+    chip: "bg-indigo-500 text-white border-indigo-300",
+    bar: "bg-indigo-400",
+    swatch: "bg-indigo-400",
+  },
+  Orca: {
+    chip: "bg-cyan-500 text-white border-cyan-300",
+    bar: "bg-cyan-400",
+    swatch: "bg-cyan-400",
+  },
 }
 
 export const OPS_PROJECT_PAINT: Record<OpsProject, OpsProjectPaint> = {
@@ -82,6 +94,8 @@ export const OPS_PROJECT_PAINT: Record<OpsProject, OpsProjectPaint> = {
   Security: { chip: "#ef4444", rail: "#f87171", ink: "#ffffff", border: "#fca5a5" },
   Marketing: { chip: "#d946ef", rail: "#e879f9", ink: "#ffffff", border: "#f0abfc" },
   Jimbo: { chip: "#fbbf24", rail: "#fcd34d", ink: "#451a03", border: "#fde68a" },
+  Maven: { chip: "#6366f1", rail: "#818cf8", ink: "#ffffff", border: "#a5b4fc" },
+  Orca: { chip: "#06b6d4", rail: "#22d3ee", ink: "#ffffff", border: "#67e8f9" },
 }
 
 const PROJECT_ALIASES: Record<string, OpsProject> = {
@@ -89,6 +103,8 @@ const PROJECT_ALIASES: Record<string, OpsProject> = {
   "off replit": "Off Replit",
   "hangar18": "Hangar 18",
   james: "Jimbo",
+  maven: "Maven",
+  orca: "Orca",
 }
 
 const PREFIX_RE = /^\s*(?:\[([^\]]+)\]|([^:–—\-/]+)\s*(?::|–|—|-|\/))\s*(.+)$/
