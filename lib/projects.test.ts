@@ -66,6 +66,10 @@ describe("project prefix and labels", () => {
     assert.equal(matchOpsProject("Off Replit/CF"), "Off Replit")
     assert.equal(matchOpsProject("Jimbo"), "Jimbo")
     assert.equal(matchOpsProject("James"), "Jimbo")
+    assert.equal(matchOpsProject("Maven"), "Maven")
+    assert.equal(matchOpsProject("Orca"), "Orca")
+    assert.equal(matchOpsProject("maven"), "Maven")
+    assert.equal(matchOpsProject("orca"), "Orca")
     assert.equal(projectBarClass("Giant"), "bg-blue-400")
     assert.equal(projectBarClass("Paylyte"), "bg-orange-400")
     assert.equal(projectBarClass("MiniKanban"), "bg-gradient-to-b from-violet-400 to-teal-400")
@@ -75,6 +79,8 @@ describe("project prefix and labels", () => {
     assert.equal(projectBarClass("Marketing"), "bg-fuchsia-400")
     assert.equal(projectBarClass("Jimbo"), "bg-amber-300")
     assert.equal(projectBarClass("James"), "bg-amber-300")
+    assert.equal(projectBarClass("Maven"), "bg-indigo-400")
+    assert.equal(projectBarClass("Orca"), "bg-cyan-400")
   })
 
   it("colors [Marketing] and [Security] title prefixes", () => {
@@ -106,6 +112,32 @@ describe("project prefix and labels", () => {
     assert.equal(projectPaint("Security")?.rail, "#f87171")
     assert.equal(projectPaint("Paylyte")?.rail, "#fb923c")
     assert.equal(projectPaint("Marketing")?.chip, "#d946ef")
+    assert.equal(projectPaint("Maven")?.chip, "#6366f1")
+    assert.equal(projectPaint("Maven")?.rail, "#818cf8")
+    assert.equal(projectPaint("Maven")?.ink, "#ffffff")
+    assert.equal(projectPaint("Orca")?.chip, "#06b6d4")
+    assert.equal(projectPaint("Orca")?.rail, "#22d3ee")
+    assert.equal(projectPaint("Orca")?.ink, "#ffffff")
+  })
+
+  it("registers Maven and Orca as distinct known projects", () => {
+    assert.ok(OPS_PROJECTS.includes("Maven"))
+    assert.ok(OPS_PROJECTS.includes("Orca"))
+    assert.ok(OPS_PROJECTS.includes("Jimbo"))
+    assert.equal((OPS_PROJECTS as readonly string[]).includes("James"), false)
+
+    const paints = OPS_PROJECTS.map((project) => projectPaint(project)!)
+    const chipKeys = new Set(paints.map((paint) => paint.chip))
+    const railKeys = new Set(paints.map((paint) => paint.rail))
+    assert.equal(chipKeys.size, OPS_PROJECTS.length, "each project needs a distinct chip paint")
+    assert.equal(railKeys.size, OPS_PROJECTS.length, "each project needs a distinct rail paint")
+
+    assert.equal(projectChipClass("Maven"), "bg-indigo-500 text-white border-indigo-300")
+    assert.equal(projectChipClass("Orca"), "bg-cyan-500 text-white border-cyan-300")
+    assert.equal(matchOpsProject("MAVEN"), "Maven")
+    assert.equal(matchOpsProject("ORCA"), "Orca")
+    assert.equal(parseProjectFilter("maven"), "Maven")
+    assert.equal(parseProjectFilter("orca"), "Orca")
   })
 
   it("gives James's Security-labeled card both pill and rail paints", () => {
@@ -126,6 +158,8 @@ describe("project prefix and labels", () => {
       { id: "2", title: "Wire x402", labels: ["Paylyte"] },
       { id: "3", title: "No project yet", labels: [] },
       { id: "4", title: "Review the ask", labels: ["Marketing"], project: "James" },
+      { id: "5", title: "Paylyte X posts today", labels: ["Maven"] },
+      { id: "6", title: "MiniKanban worker secrets", labels: ["Orca"] },
     ]
 
     assert.equal(parseProjectFilter(null), "all")
@@ -134,7 +168,9 @@ describe("project prefix and labels", () => {
     assert.equal(parseProjectFilter("james"), "Jimbo")
     assert.equal(parseProjectFilter("unknown"), "all")
 
-    assert.equal(filterTasksByProject(tasks, "all").length, 4)
+    assert.equal(filterTasksByProject(tasks, "all").length, 6)
+    assert.equal(parseProjectFilter("maven"), "Maven")
+    assert.equal(parseProjectFilter("orca"), "Orca")
     assert.deepEqual(
       filterTasksByProject(tasks, "Giant").map((task) => task.id),
       ["1"],
@@ -150,6 +186,14 @@ describe("project prefix and labels", () => {
     assert.deepEqual(
       filterTasksByProject(tasks, "James").map((task) => task.id),
       ["4"],
+    )
+    assert.deepEqual(
+      filterTasksByProject(tasks, "Maven").map((task) => task.id),
+      ["5"],
+    )
+    assert.deepEqual(
+      filterTasksByProject(tasks, "Orca").map((task) => task.id),
+      ["6"],
     )
     assert.equal(taskMatchesProjectFilter(tasks[2], "Giant"), false)
     assert.equal(taskMatchesProjectFilter(tasks[2], "all"), true)
@@ -172,6 +216,12 @@ describe("project prefix and labels", () => {
       "bg-amber-400",
       "from-violet-400",
       "to-teal-400",
+      "bg-indigo-500",
+      "border-indigo-300",
+      "bg-indigo-400",
+      "bg-cyan-500",
+      "border-cyan-300",
+      "bg-cyan-400",
     ]) {
       assert.ok(safelist.includes(token), `missing safelist token ${token}`)
     }
