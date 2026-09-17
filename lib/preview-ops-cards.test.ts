@@ -19,6 +19,24 @@ describe("ops card preview fixtures", () => {
     assert.match(projectBarClass("Security"), /red/)
   })
 
+  it("includes Maven (indigo) and Orca (cyan) cards", () => {
+    const source = readFileSync(new URL("./preview-ops-cards.ts", import.meta.url), "utf8")
+    assert.match(source, /title: "\[Maven\]/)
+    assert.match(source, /title: "\[Orca\]/)
+    assert.match(source, /labels: \["Maven"\]/)
+    assert.match(source, /labels: \["Orca"\]/)
+
+    const maven = getTaskProject({ title: "[Maven] Paylyte X posts today", labels: ["Maven"] })
+    const orca = getTaskProject({ title: "[Orca] MiniKanban worker secrets", labels: ["Orca"] })
+    assert.equal(maven?.known, "Maven")
+    assert.equal(orca?.known, "Orca")
+    assert.match(projectChipClass("Maven"), /indigo/)
+    assert.match(projectBarClass("Orca"), /cyan/)
+    assert.notEqual(projectChipClass("Maven"), projectChipClass("Orca"))
+    assert.notEqual(projectChipClass("Maven"), "bg-white/15 text-white border-white/25")
+    assert.notEqual(projectChipClass("Orca"), "bg-white/15 text-white border-white/25")
+  })
+
   it("includes created dates and a Done card with completedAt", () => {
     const source = readFileSync(new URL("./preview-ops-cards.ts", import.meta.url), "utf8")
     assert.match(source, /createdAt: "2026-09-14T16:00:00.000Z"/)
