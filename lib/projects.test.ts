@@ -118,7 +118,7 @@ describe("project prefix and labels", () => {
     assert.equal(projectPaint("Orca")?.chip, "#06b6d4")
     assert.equal(projectPaint("Orca")?.rail, "#22d3ee")
     assert.equal(projectPaint("Orca")?.ink, "#ffffff")
-  }
+  })
 
   it("registers Maven and Orca as distinct known projects", () => {
     assert.ok(OPS_PROJECTS.includes("Maven"))
