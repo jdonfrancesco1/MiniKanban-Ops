@@ -1,8 +1,10 @@
 "use client"
 
 import { useState } from "react"
+import { useDroppable } from "@dnd-kit/core"
 import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
+import { columnDroppableId } from "@/lib/kanban-dnd"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -28,6 +30,8 @@ type KanbanColumnProps = {
   column: Column
   tasks: Task[]
   isDropTarget?: boolean
+  dragKind?: "task" | "column" | null
+  readOnly?: boolean
   className?: string
   onDeleteColumn?: (columnId: string, columnTitle: string) => void
   onRenameColumn?: (columnId: string, title: string) => Promise<void> | void
@@ -42,6 +46,8 @@ export function KanbanColumn({
   column,
   tasks,
   isDropTarget = false,
+  dragKind = null,
+  readOnly = false,
   className,
   onDeleteColumn,
   onRenameColumn,
@@ -62,12 +68,24 @@ export function KanbanColumn({
     data: {
       type: "column",
       column,
+      columnId: column.id,
     },
+    disabled: readOnly || dragKind === "task",
+  })
+
+  const { setNodeRef: setDroppableRef, isOver } = useDroppable({
+    id: columnDroppableId(column.id),
+    data: {
+      type: "column",
+      column,
+      columnId: column.id,
+    },
+    disabled: readOnly || dragKind === "column",
   })
 
   const style = {
     transform: CSS.Transform.toString(transform),
-    transition: isColumnDragging ? undefined : transition,
+    transition: isColumnDragging ? "none" : transition,
     zIndex: isColumnDragging ? 999 : undefined,
     opacity: isColumnDragging ? 0.8 : 1,
   }
@@ -111,9 +129,9 @@ export function KanbanColumn({
         ref={setNodeRef}
         style={style}
         className={cn(
-          "w-80 shrink-0 flex flex-col h-full max-h-full min-h-0 snap-center transition-all duration-200 bg-[#2a1b3e]/80 border-white/10 overflow-hidden",
+          "w-80 shrink-0 flex flex-col h-full max-h-full min-h-0 snap-center bg-[#2a1b3e]/80 border-white/10 overflow-hidden",
           isColumnDragging && "opacity-80 shadow-xl z-50 scale-[1.02]",
-          isDropTarget && "ring-2 ring-pink-400 ring-offset-2 ring-offset-[#1a0b2e]",
+          (isDropTarget || isOver) && "ring-2 ring-pink-400 ring-offset-2 ring-offset-[#1a0b2e]",
           className,
         )}
         data-column-id={column.id}
@@ -175,11 +193,17 @@ export function KanbanColumn({
                 boardId={boardId}
                 columnId={column.id}
                 columnTitle={column.title}
+                dragDisabled={readOnly || dragKind === "column"}
                 onDeleted={() => onTaskDelete?.(column.id, task.id)}
                 onUpdated={onTaskUpdate}
               />
             ))}
           </SortableContext>
+          <div
+            ref={setDroppableRef}
+            data-testid="kanban-column-drop"
+            className="min-h-[52px] flex-1 rounded-md"
+          />
 
           {isAddingTask ? (
             <div className="space-y-2">

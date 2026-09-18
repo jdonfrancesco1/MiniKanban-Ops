@@ -30,7 +30,6 @@ import { EditorErrorBoundary } from "./editor-error-boundary"
 import { TaskDetailModal } from "./task-detail-modal"
 import { TaskEditModal } from "./task-edit-modal"
 import { StickerLayer } from "./sticker-layer"
-import { useMobile } from "@/hooks/use-mobile"
 import type { StickerItem } from "./sticker-panel"
 
 type KanbanCardProps = {
@@ -39,6 +38,7 @@ type KanbanCardProps = {
   columnId: string
   columnTitle?: string
   isDropTarget?: boolean
+  dragDisabled?: boolean
   className?: string
   onStickerAdd?: (sticker: StickerItem) => void
   onStickerMove?: (stickerId: string, position: { x: number; y: number }) => void
@@ -53,6 +53,7 @@ export function KanbanCard({
   columnId,
   columnTitle,
   isDropTarget = false,
+  dragDisabled = false,
   className,
   onStickerAdd,
   onStickerMove,
@@ -65,21 +66,19 @@ export function KanbanCard({
   const [showDetail, setShowDetail] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
   const [showDragTooltip, setShowDragTooltip] = useState(false)
+  const [didDrag, setDidDrag] = useState(false)
   const taskRef = useRef<HTMLDivElement>(null)
   const { toast } = useToast()
   const { addUndoAction, clearUndoAction } = useUndo()
-  const isMobile = useMobile()
 
-  // Set up sortable with enhanced options for better mobile support
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging, active } = useSortable({
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: task.id,
     data: {
       type: "task",
       task,
       columnId,
     },
-    // Enhanced touch sensor options for better mobile experience
-    animateLayoutChanges: () => false, // Disable layout animations for smoother dragging
+    disabled: dragDisabled,
   })
 
   // Show drag tooltip briefly when dragging starts
@@ -91,13 +90,15 @@ export function KanbanCard({
     }
   }, [isDragging, showDragTooltip])
 
-  // Enhanced style for dragging with smoother animations
+  useEffect(() => {
+    if (isDragging) setDidDrag(true)
+  }, [isDragging])
+
   const style = {
     transform: CSS.Transform.toString(transform),
-    transition: isDragging ? undefined : transition,
-    zIndex: isDragging ? 999 : undefined,
-    opacity: isDragging ? 0.8 : 1,
-    scale: isDragging ? 1.02 : 1,
+    transition: isDragging ? "none" : transition,
+    zIndex: isDragging ? 50 : undefined,
+    opacity: isDragging ? 0.35 : 1,
   }
 
   const project = getTaskProject(task)
@@ -210,18 +211,25 @@ export function KanbanCard({
           }}
           style={style}
           className={cn(
-            "cursor-pointer relative transition-all duration-200 overflow-visible pl-1",
+            "relative overflow-visible pl-1 touch-none",
             "glassmorphic-card",
+            dragDisabled ? "cursor-pointer" : "cursor-grab active:cursor-grabbing",
             isDragging && "shadow-lg ring-2 ring-white/20",
             isDropTarget && "ring-2 ring-white/50 ring-offset-2 bg-white/5",
-            "hover:shadow-md",
+            !isDragging && "hover:shadow-md",
             className,
           )}
           data-task-id={task.id}
           data-column-id={columnId}
           data-testid="ops-task-card"
+          {...attributes}
+          {...listeners}
           onClick={() => {
-            if (!isDragging) setShowDetail(true)
+            if (isDragging || didDrag) {
+              setDidDrag(false)
+              return
+            }
+            setShowDetail(true)
           }}
         >
           {project ? (
@@ -239,11 +247,9 @@ export function KanbanCard({
                 <div
                   className={cn(
                     "mt-0.5 p-1 rounded text-white/70 shrink-0 cursor-grab active:cursor-grabbing",
-                    "group-hover:bg-white/10 group-hover:text-white transition-colors",
+                    "group-hover:bg-white/10 group-hover:text-white",
                     isDragging && "bg-white/10 text-white",
                   )}
-                  {...attributes}
-                  {...listeners}
                   onClick={(event) => event.stopPropagation()}
                 >
                   <GripVertical className="h-4 w-4" />
@@ -382,5 +388,43 @@ export function KanbanCard({
         </AlertDialogContent>
       </AlertDialog>
     </>
+  )
+}
+
+export function KanbanDragOverlay({ task }: { task: Task }) {
+  const project = getTaskProject(task)
+  const chrome = project ? projectCardChrome(project.project) : null
+  const displayTitle = project?.displayTitle || task.title
+  const brief = cardFaceBrief(task)
+
+  return (
+    <Card
+      data-testid="kanban-drag-overlay"
+      className="w-80 cursor-grabbing overflow-visible pl-1 shadow-2xl ring-2 ring-white/30 glassmorphic-card rotate-1"
+    >
+      {project ? (
+        <span
+          aria-hidden
+          data-testid="project-rail"
+          data-project-rail={chrome?.known ?? project.project}
+          className="ops-project-rail"
+          style={projectRailStyle(project.project)}
+        />
+      ) : null}
+      <CardContent className="p-3 pl-4 space-y-2">
+        <div className="flex items-start gap-2">
+          <div className="mt-0.5 p-1 rounded bg-white/10 text-white shrink-0">
+            <GripVertical className="h-4 w-4" />
+          </div>
+          <div className="flex-1 min-w-0 space-y-1.5">
+            {project ? <ProjectChip project={project.project} /> : null}
+            <h4 className="text-sm font-medium leading-snug text-white break-words">{displayTitle}</h4>
+            {brief ? (
+              <p className="text-xs leading-snug text-white/75 line-clamp-2 break-words">{brief}</p>
+            ) : null}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
   )
 }
