@@ -1,4 +1,5 @@
 import { OPS_COLUMN_TITLES } from "../db/ops-defaults.ts"
+import { taskShortId } from "../task-short-id.ts"
 import type { OpsApiBoard, OpsApiTask } from "../types.ts"
 
 export const OPS_MCP_BOARD_SLUG = "ops"
@@ -37,6 +38,7 @@ export function findActiveTaskByTitle<T extends { title: string }>(tasks: T[], t
 
 export type PresentedOpsTask = {
   id: string
+  shortId: string
   title: string
   brief: string
   description: string
@@ -61,6 +63,7 @@ export type PresentedOpsBoard = {
 export function presentOpsTask(task: OpsApiTask, columnTitle: string): PresentedOpsTask {
   return {
     id: task.id,
+    shortId: task.shortId || taskShortId(task.id),
     title: task.title,
     brief: task.brief ?? "",
     description: task.description ?? "",

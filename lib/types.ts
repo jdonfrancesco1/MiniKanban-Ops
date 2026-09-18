@@ -156,6 +156,8 @@ export type OpsBoardDiagnostics = {
 
 export type OpsApiTask = {
   id: string
+  /** Derived from `id` (MKB- + first 8 hex). Not a second stored key. */
+  shortId?: string
   title: string
   description: string
   brief?: string | null

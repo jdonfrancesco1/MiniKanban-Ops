@@ -26,10 +26,11 @@ export default function OpsCardPreviewPage() {
     <div className="h-screen overflow-hidden bg-[#1a0b2e] text-white flex flex-col">
       <div className="shrink-0 px-6 pt-6 pb-3">
         <p className="text-xs uppercase tracking-[0.2em] text-pink-300">Ops card preview</p>
-        <h1 className="text-2xl font-semibold mt-1 mb-2">Project colors, briefs, dates, and live drag</h1>
+        <h1 className="text-2xl font-semibold mt-1 mb-2">Project colors, briefs, dates, short ids, and live drag</h1>
         <p className="text-sm text-white/70 mb-4 max-w-xl">
-          Drag any card left/right between columns or up/down to reorder. Click a card for the full Need you
-          description. This page is a layout preview and does not load Helium.
+          Drag any card left/right between columns or up/down to reorder. Each card shows a stable short id
+          (MKB- + first 8 of the task id). Click a card for the full Need you description. This page is a layout
+          preview and does not load Helium.
         </p>
         <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1.5">
           <span className="text-[11px] font-medium uppercase tracking-wide text-white/50">Project</span>
