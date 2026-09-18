@@ -90,11 +90,11 @@ export const MCP_TOOL_DEFINITIONS = [
   {
     name: "move_task",
     description:
-      "Move an active task by id or title to Need you, I'm on, Waiting, or Done. Moving to Done stamps completedAt.",
+      "Move an active task by UUID, short id (MKB-7E3A1234), or title to Need you, I'm on, Waiting, or Done. Moving to Done stamps completedAt.",
     inputSchema: {
       type: "object",
       properties: {
-        id: { type: "string", description: "Task id." },
+        id: { type: "string", description: "Task UUID or short id (MKB-7E3A1234)." },
         title: { type: "string", description: "Exact active task title if id is unknown." },
         column: {
           type: "string",
@@ -116,7 +116,7 @@ export const MCP_TOOL_DEFINITIONS = [
     inputSchema: {
       type: "object",
       properties: {
-        id: { type: "string", description: "Task id." },
+        id: { type: "string", description: "Task UUID or short id (MKB-7E3A1234)." },
         title: { type: "string", description: "Exact active task title if id is unknown." },
       },
       additionalProperties: false,
@@ -128,7 +128,7 @@ export const MCP_TOOL_DEFINITIONS = [
     inputSchema: {
       type: "object",
       properties: {
-        id: { type: "string", description: "Task id." },
+        id: { type: "string", description: "Task UUID or short id (MKB-7E3A1234)." },
         title: { type: "string", description: "Exact active task title if id is unknown." },
       },
       additionalProperties: false,
@@ -140,7 +140,7 @@ export const MCP_TOOL_DEFINITIONS = [
     inputSchema: {
       type: "object",
       properties: {
-        id: { type: "string", description: "Task id." },
+        id: { type: "string", description: "Task UUID or short id (MKB-7E3A1234)." },
         title: { type: "string", description: "Current title, used to find the task when id is omitted." },
         newTitle: { type: "string", description: "Replacement title." },
         brief: { type: "string", description: "1–2 line card-face summary." },

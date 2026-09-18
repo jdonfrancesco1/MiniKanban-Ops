@@ -135,6 +135,7 @@ export function KanbanColumn({
           className,
         )}
         data-column-id={column.id}
+        data-column-title={column.title}
         {...attributes}
       >
         <CardHeader
@@ -185,26 +186,29 @@ export function KanbanColumn({
         </CardHeader>
 
         <CardContent className="p-3 pb-8 flex-1 flex flex-col gap-3 min-h-0 overflow-y-auto overflow-x-visible">
-          <SortableContext items={taskIds} strategy={verticalListSortingStrategy} id={`column-${column.id}-tasks`}>
-            {(tasks || []).map((task) => (
-              <KanbanCard
-                key={task.id}
-                task={task}
-                boardId={boardId}
-                columnId={column.id}
-                columnTitle={column.title}
-                dragDisabled={readOnly || dragKind === "column"}
-                onDeleted={() => onTaskDelete?.(column.id, task.id)}
-                onUpdated={onTaskUpdate}
-              />
-            ))}
-          </SortableContext>
           <div
             ref={setDroppableRef}
             data-testid="kanban-column-drop"
             data-column-id={column.id}
-            className="min-h-[52px] flex-1 rounded-md"
-          />
+            data-column-title={column.title}
+            className="flex-1 flex flex-col gap-3 min-h-[52px] rounded-md"
+          >
+            <SortableContext items={taskIds} strategy={verticalListSortingStrategy} id={`column-${column.id}-tasks`}>
+              {(tasks || []).map((task) => (
+                <KanbanCard
+                  key={task.id}
+                  task={task}
+                  boardId={boardId}
+                  columnId={column.id}
+                  columnTitle={column.title}
+                  dragDisabled={readOnly || dragKind === "column"}
+                  onDeleted={() => onTaskDelete?.(column.id, task.id)}
+                  onUpdated={onTaskUpdate}
+                />
+              ))}
+            </SortableContext>
+            <div className="min-h-[52px] flex-1 rounded-md" />
+          </div>
 
           {isAddingTask ? (
             <div className="space-y-2">

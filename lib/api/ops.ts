@@ -18,7 +18,9 @@ import {
 } from "@/lib/mcp/lookup"
 import type { OpsApiBoard, OpsApiTask, OpsBoardDiagnostics } from "@/lib/ops-board"
 import { getTaskProject, upsertProjectLabel } from "@/lib/projects"
+import { findTasksByRef, taskShortId } from "@/lib/task-short-id"
 import { extractTasksFromBoard, type Board, type Column, type Task } from "@/lib/types"
+import { sortByOrder } from "@/lib/kanban-dnd"
 
 export const DEFAULT_OPS_COLUMN_TITLE = OPS_COLUMN_TITLES[0]
 
@@ -27,6 +29,7 @@ export type { OpsApiBoard, OpsApiColumn, OpsApiTask, OpsBoardDiagnostics } from 
 export function serializeOpsTask(task: Task): OpsApiTask {
   return {
     id: task.id,
+    shortId: taskShortId(task.id),
     title: task.title,
     description: task.description ?? "",
     brief: task.brief ?? "",
@@ -112,6 +115,26 @@ export function projectLabelsForTask(input: { title: string; labels?: string[] }
   return inferred ? upsertProjectLabel(input.labels ?? [], inferred.project) : input.labels ?? []
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+async function resolveTaskByIdRef(id: string): Promise<Task | null> {
+  if (UUID_RE.test(id)) {
+    try {
+      const task = await getTaskById(id)
+      if (task?.columnId) return task
+    } catch {
+      // Invalid or missing UUID — fall through to short-id scan.
+    }
+  }
+
+  const board = await ensureDefaultBoard()
+  const matches = findTasksByRef(extractTasksFromBoard(board), id)
+  if (matches.length > 1) {
+    throw new Error("Multiple tasks match id")
+  }
+  return matches[0] ?? null
+}
+
 export async function resolveOpsTask(query: { id?: string; title?: string }): Promise<OpsApiTask> {
   await requireOpsApi()
   const id = query.id?.trim()
@@ -121,7 +144,7 @@ export async function resolveOpsTask(query: { id?: string; title?: string }): Pr
   }
 
   if (id) {
-    const task = await getTaskById(id)
+    const task = await resolveTaskByIdRef(id)
     if (!task?.columnId) {
       throw new Error("Task not found")
     }
@@ -203,7 +226,7 @@ export async function createOpsTask(input: {
 
 export async function moveOpsTask(
   taskId: string,
-  input: { columnId?: string; columnTitle?: string },
+  input: { columnId?: string; columnTitle?: string; position?: number; beforeTaskId?: string | null },
 ) {
   await requireOpsApi()
   if (!input.columnId && !input.columnTitle?.trim()) {
@@ -211,7 +234,7 @@ export async function moveOpsTask(
   }
 
   const board = await ensureDefaultBoard()
-  const task = await getTaskById(taskId)
+  const task = (UUID_RE.test(taskId) ? await getTaskById(taskId) : null) ?? (await resolveTaskByIdRef(taskId))
   if (!task?.columnId) {
     throw new Error("Task not found")
   }
@@ -224,8 +247,19 @@ export async function moveOpsTask(
     throw new Error("Column not found")
   }
 
-  await moveTask(board.id, task.columnId, task.id, column.id, Number.MAX_SAFE_INTEGER)
-  const updated = (await getTaskById(taskId)) ?? { ...task, columnId: column.id }
+  let destIndex = Number.MAX_SAFE_INTEGER
+  if (typeof input.position === "number" && Number.isFinite(input.position)) {
+    destIndex = Math.max(0, Math.floor(input.position))
+  } else if (input.beforeTaskId) {
+    const dest = sortByOrder(
+      extractTasksFromBoard(board).filter((item) => String(item.columnId) === column.id && item.id !== task.id),
+    )
+    const index = dest.findIndex((item) => item.id === input.beforeTaskId)
+    destIndex = index >= 0 ? index : dest.length
+  }
+
+  await moveTask(board.id, task.columnId, task.id, column.id, destIndex)
+  const updated = (await getTaskById(task.id)) ?? { ...task, columnId: column.id }
   return { task: serializeOpsTask(updated) }
 }
 

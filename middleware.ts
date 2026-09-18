@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server"
 import { isOpsRequestAuthorized } from "@/lib/auth/request"
 
-const PUBLIC_PREFIXES = ["/_next", "/favicon", "/icon", "/placeholder", "/api/auth"]
+const PUBLIC_PREFIXES = ["/_next", "/favicon", "/icon", "/placeholder", "/api/auth", "/preview"]
 
 function isPublicPath(pathname: string) {
   if (pathname === "/" || pathname === "/auth" || pathname === "/login" || pathname === "/connect") return true

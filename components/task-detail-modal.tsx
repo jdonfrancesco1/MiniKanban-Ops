@@ -16,6 +16,7 @@ import type { Task } from "@/lib/types"
 import { TaskDateLine } from "./task-date-line"
 import { FormattedDescription } from "./formatted-description"
 import { ProjectChip } from "./project-chip"
+import { TaskShortIdBadge } from "./task-short-id"
 
 type TaskDetailModalProps = {
   open: boolean
@@ -41,6 +42,7 @@ export function TaskDetailModal({ open, onOpenChange, task, columnTitle, onEdit 
         <DialogHeader className="space-y-3 text-left">
           <div className="flex flex-wrap items-center gap-2">
             {project ? <ProjectChip project={project.project} /> : null}
+            <TaskShortIdBadge taskId={task.id} />
             <span className="text-[11px] uppercase tracking-[0.16em] text-white/50">What James must do</span>
           </div>
           <DialogTitle className="text-xl leading-snug text-white">{title}</DialogTitle>

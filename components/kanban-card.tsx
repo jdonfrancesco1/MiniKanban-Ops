@@ -30,6 +30,7 @@ import { EditorErrorBoundary } from "./editor-error-boundary"
 import { TaskDetailModal } from "./task-detail-modal"
 import { TaskEditModal } from "./task-edit-modal"
 import { StickerLayer } from "./sticker-layer"
+import { TaskShortIdBadge } from "./task-short-id"
 import type { StickerItem } from "./sticker-panel"
 
 type KanbanCardProps = {
@@ -79,6 +80,7 @@ export function KanbanCard({
       columnId,
     },
     disabled: dragDisabled,
+    animateLayoutChanges: () => false,
   })
 
   // Show drag tooltip briefly when dragging starts
@@ -255,7 +257,10 @@ export function KanbanCard({
                   <GripVertical className="h-4 w-4" />
                 </div>
                 <div className="flex-1 min-w-0 space-y-1.5">
-                  {project ? <ProjectChip project={project.project} /> : null}
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {project ? <ProjectChip project={project.project} /> : null}
+                    <TaskShortIdBadge taskId={task.id} />
+                  </div>
                   <h4 className="text-sm font-medium leading-snug text-white break-words">{displayTitle}</h4>
                   {brief ? (
                     <p className="text-xs leading-snug text-white/75 line-clamp-2 break-words" data-testid="task-brief">
@@ -417,7 +422,10 @@ export function KanbanDragOverlay({ task }: { task: Task }) {
             <GripVertical className="h-4 w-4" />
           </div>
           <div className="flex-1 min-w-0 space-y-1.5">
-            {project ? <ProjectChip project={project.project} /> : null}
+            <div className="flex flex-wrap items-center gap-1.5">
+              {project ? <ProjectChip project={project.project} /> : null}
+              <TaskShortIdBadge taskId={task.id} copyable={false} />
+            </div>
             <h4 className="text-sm font-medium leading-snug text-white break-words">{displayTitle}</h4>
             {brief ? (
               <p className="text-xs leading-snug text-white/75 line-clamp-2 break-words">{brief}</p>

@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
 import KanbanBoardComponent from "@/components/kanban-board"
 import { useUndoContext } from "@/contexts/undo-context"
@@ -21,6 +21,7 @@ import {
   type OpsBoardDiagnostics,
 } from "@/lib/ops-board"
 import { completedAtForColumnMove, placeTaskBefore } from "@/lib/kanban-dnd"
+import { persistOpsTaskMove } from "@/lib/ops-move-client"
 import { filterTasksByProject, type ProjectFilterValue } from "@/lib/projects"
 import { Button } from "@/components/ui/button"
 import { ProjectFilter, ProjectLegend } from "@/components/project-chip"
@@ -40,11 +41,16 @@ export default function BoardPage() {
   const [tasks, setTasks] = useState<Task[]>([])
   const [diagnostics, setDiagnostics] = useState<OpsBoardDiagnostics | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [hasLoaded, setHasLoaded] = useState(false)
   const [projectFilter, setProjectFilter] = useState<ProjectFilterValue>("all")
+  const pendingMovesRef = useRef(new Set<string>())
 
   const applyBoard = useCallback((boardData: Board) => {
     setBoard(boardData)
     setColumns(boardData.columns || [])
+    if (pendingMovesRef.current.size > 0) {
+      return
+    }
     setTasks(extractTasksFromBoard(boardData))
   }, [])
 
@@ -59,7 +65,7 @@ export default function BoardPage() {
 
   const loadBoardData = useCallback(async (options?: { silent?: boolean }) => {
     try {
-      if (!options?.silent) setIsLoading(true)
+      if (!options?.silent && !hasLoaded) setIsLoading(true)
       let apiBoard: Board | null = null
       let serverBoard: Board | null = null
 
@@ -84,24 +90,27 @@ export default function BoardPage() {
       }
 
       applyBoard(picked.board)
-      clearUndoAction()
+      setHasLoaded(true)
       if (picked.board.slug === "ops" && boardId !== "ops" && boardId !== picked.board.id) {
         router.replace(`/boards/${picked.board.id}`)
       }
     } catch (error) {
       console.error("Error fetching board:", error)
       toast({ title: "Error", description: "Failed to load board data.", variant: "destructive" })
-      router.push("/boards")
+      if (!hasLoaded) router.push("/boards")
     } finally {
       if (!options?.silent) setIsLoading(false)
     }
-  }, [applyBoard, boardId, fetchOpsJsonBoard, router, clearUndoAction, toast])
+  }, [applyBoard, boardId, fetchOpsJsonBoard, hasLoaded, router, toast])
 
+  const userId = user?.uid ?? null
+  const loadBoardDataRef = useRef(loadBoardData)
+  loadBoardDataRef.current = loadBoardData
   useEffect(() => {
-    if (!authLoading && user) {
-      void loadBoardData()
+    if (!authLoading && userId) {
+      void loadBoardDataRef.current()
     }
-  }, [authLoading, user, loadBoardData])
+  }, [authLoading, userId, boardId])
 
   const handleColumnAdd = async (title: string) => {
     const newColumn = await DBService.addColumn(boardId === "ops" ? board?.id || boardId : board?.id || boardId, title)
@@ -207,19 +216,24 @@ export default function BoardPage() {
     })
     if (next === previous) return
 
+    pendingMovesRef.current.add(taskId)
     setTasks(next)
     try {
       const destIndex = next
         .filter((task) => String(task.columnId) === destinationColumnId)
         .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
         .findIndex((task) => task.id === taskId)
-      await DBService.moveTask(
-        resolvedBoardId,
-        sourceColumnId,
-        taskId,
-        destinationColumnId,
-        destIndex < 0 ? 0 : destIndex,
-      )
+      const index = destIndex < 0 ? 0 : destIndex
+      if (isOpsBoardRoute(boardId, board?.slug)) {
+        await persistOpsTaskMove({
+          taskId,
+          destColumnId: destinationColumnId,
+          destIndex: index,
+          beforeTaskId,
+        })
+      } else {
+        await DBService.moveTask(resolvedBoardId, sourceColumnId, taskId, destinationColumnId, index)
+      }
     } catch (error) {
       console.error("Error moving task:", error)
       setTasks(previous)
@@ -228,6 +242,8 @@ export default function BoardPage() {
         description: error instanceof Error ? error.message : "Failed to move task.",
         variant: "destructive",
       })
+    } finally {
+      pendingMovesRef.current.delete(taskId)
     }
   }
 
@@ -236,7 +252,7 @@ export default function BoardPage() {
     [board?.slug, boardId, projectFilter, tasks],
   )
 
-  if (isLoading || authLoading) {
+  if ((isLoading || authLoading) && !hasLoaded) {
     return (
       <div className="flex items-center justify-center h-screen bg-[#1a0b2e] text-white">
         <Loader2 className="w-8 h-8 animate-spin" />

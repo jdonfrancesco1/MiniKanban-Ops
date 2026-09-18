@@ -92,9 +92,16 @@ export function KanbanBoard({
   const displayTasks = draftTasks ?? propTasks ?? []
 
   useEffect(() => {
-    if (!dragKindRef.current) {
-      setDraftTasks(null)
-    }
+    if (dragKindRef.current) return
+    setDraftTasks((draft) => {
+      if (!draft) return null
+      const incoming = propTasks || []
+      const moved = draft.find((task, index) => {
+        const same = incoming.find((item) => item.id === task.id)
+        return !same || String(same.columnId) !== String(task.columnId) || (same.order ?? 0) !== (task.order ?? index)
+      })
+      return moved ? draft : null
+    })
   }, [propTasks])
 
   const sensors = useSensors(
@@ -202,19 +209,24 @@ export function KanbanBoard({
     const { active, over } = event
     const kind = dragKindRef.current
     const overTarget = readOver(event)
-    dragKindRef.current = null
-    setDragKind(null)
-    setActiveTask(null)
-    lastOverRef.current = null
-    setOverColumnId(null)
 
     if (readOnly) {
+      dragKindRef.current = null
+      setDragKind(null)
+      setActiveTask(null)
       setDraftTasks(null)
+      lastOverRef.current = null
+      setOverColumnId(null)
       return
     }
 
     if (kind === "column" && over && over.id !== active.id) {
+      dragKindRef.current = null
+      setDragKind(null)
+      setActiveTask(null)
       setDraftTasks(null)
+      lastOverRef.current = null
+      setOverColumnId(null)
       const newIndex = columnIds.indexOf(String(over.id))
       if (newIndex >= 0) onColumnMove(String(active.id), newIndex)
       return
@@ -222,10 +234,20 @@ export function KanbanBoard({
 
     if (kind === "task") {
       finishTaskDrag(String(active.id), overTarget)
+      dragKindRef.current = null
+      setDragKind(null)
+      setActiveTask(null)
+      lastOverRef.current = null
+      setOverColumnId(null)
       return
     }
 
+    dragKindRef.current = null
+    setDragKind(null)
+    setActiveTask(null)
     setDraftTasks(null)
+    lastOverRef.current = null
+    setOverColumnId(null)
   }
 
   const handleDragCancel = () => {
@@ -286,7 +308,7 @@ export function KanbanBoard({
             )}
           </div>
         </SortableContext>
-        <DragOverlay dropAnimation={{ duration: 180, easing: "cubic-bezier(0.18, 0.67, 0.6, 1.22)" }}>
+        <DragOverlay dropAnimation={null}>
           {activeTask ? <KanbanDragOverlay task={activeTask} /> : null}
         </DragOverlay>
       </DndContext>

@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import { describe, it } from "node:test"
 import type { OpsApiBoard, OpsApiTask } from "../types.ts"
 import { findActiveTaskByTitle } from "./lookup.ts"
+import { taskRefMatches } from "../task-short-id.ts"
 import {
   MCP_TOOL_DEFINITIONS,
   MCP_TOOL_NAMES,
@@ -68,7 +69,7 @@ function mockPort(seed: OpsApiTask[] = [task()]): OpsToolPort & { tasks: OpsApiT
     },
     async resolveTask(query) {
       if (query.id) {
-        const found = tasks.find((item) => item.id === query.id)
+        const found = tasks.find((item) => taskRefMatches(item.id, query.id ?? ""))
         if (!found) throw new Error("Task not found")
         return found
       }
@@ -138,6 +139,7 @@ describe("MCP tool handlers", () => {
     assert.deepEqual(columns[0].tasks[0].labels, ["MiniKanban"])
     assert.equal(columns[0].tasks[0].createdAt, "2026-09-14T16:00:00.000Z")
     assert.equal(columns[0].tasks[0].completedAt, null)
+    assert.equal(columns[0].tasks[0].shortId, "MKB-T1000000")
   })
 
   it("insert_task skips when an active title already exists", async () => {
@@ -155,6 +157,15 @@ describe("MCP tool handlers", () => {
     assert.equal(created.skipped, false)
     assert.equal(port.tasks.length, 2)
     assert.equal((created.task as { column: string }).column, "I'm on")
+  })
+
+  it("move_task resolves a short card id", async () => {
+    const port = mockPort([
+      task({ id: "7e3a1234-5678-4abc-8def-0123456789ab", title: "Named card", columnId: "need" }),
+    ])
+    const moved = parse(await runMcpTool("move_task", { id: "MKB-7E3A", column: "Done" }, port))
+    assert.equal((moved.task as { column: string; shortId: string }).column, "Done")
+    assert.equal((moved.task as { shortId: string }).shortId, "MKB-7E3A1234")
   })
 
   it("move_task and done_task resolve by title and stamp Done", async () => {
