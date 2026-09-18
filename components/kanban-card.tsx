@@ -261,7 +261,7 @@ export function KanbanCard({
                     {project ? <ProjectChip project={project.project} /> : null}
                     <TaskShortIdBadge taskId={task.id} />
                   </div>
-                  <h4 className="text-sm font-medium leading-snug text-white break-words">{displayTitle}</h4>
+                  <h4 data-testid="kanban-card-title" className="text-sm font-medium leading-snug text-white break-words">{displayTitle}</h4>
                   {brief ? (
                     <p className="text-xs leading-snug text-white/75 line-clamp-2 break-words" data-testid="task-brief">
                       {brief}
