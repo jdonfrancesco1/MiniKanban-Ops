@@ -202,6 +202,7 @@ export function KanbanColumn({
           <div
             ref={setDroppableRef}
             data-testid="kanban-column-drop"
+            data-column-id={column.id}
             className="min-h-[52px] flex-1 rounded-md"
           />
 

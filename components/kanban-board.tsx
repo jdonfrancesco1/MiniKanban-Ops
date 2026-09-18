@@ -80,7 +80,9 @@ export function KanbanBoard({
 
   const dragKindRef = useRef<DragKind | null>(null)
   const dragStartTasksRef = useRef<DbTask[]>(propTasks || [])
+  const draftTasksRef = useRef<DbTask[] | null>(null)
   const lastOverRef = useRef<OverTarget | null>(null)
+  draftTasksRef.current = draftTasks
 
   const currentColumns = useMemo(
     () => [...(propColumns || [])].sort((a, b) => a.order - b.order),
@@ -127,7 +129,7 @@ export function KanbanBoard({
     }
     lastOverRef.current = target
     const nextColumnId = target.columnId || (columnIds.includes(target.id) ? target.id : null)
-    setOverColumnId(nextColumnId)
+    setOverColumnId((current) => (current === nextColumnId ? current : nextColumnId))
     return target
   }
 
@@ -151,14 +153,18 @@ export function KanbanBoard({
     const over = readOver(event)
     if (!over) return
     setDraftTasks((current) => {
-      const next = applyTaskDragOver(dragStartTasksRef.current, {
+      const origin = dragStartTasksRef.current
+      if (over.id === String(event.active.id)) {
+        return current ?? origin
+      }
+      const next = applyTaskDragOver(origin, {
         activeId: String(event.active.id),
         overId: over.id,
         overType: over.type,
         overColumnId: over.columnId,
         columnIds,
       })
-      const currentTask = (current ?? dragStartTasksRef.current).find((task) => task.id === event.active.id)
+      const currentTask = (current ?? origin).find((task) => task.id === event.active.id)
       const nextTask = next.find((task) => task.id === event.active.id)
       if (
         currentTask &&
@@ -174,15 +180,17 @@ export function KanbanBoard({
 
   const finishTaskDrag = (activeId: string, over: OverTarget | null) => {
     const origin = dragStartTasksRef.current
-    const next = over
+    const live = draftTasksRef.current ?? origin
+    const usableOver = over && over.id !== activeId ? over : null
+    const next = usableOver
       ? applyTaskDragOver(origin, {
           activeId,
-          overId: over.id,
-          overType: over.type,
-          overColumnId: over.columnId,
+          overId: usableOver.id,
+          overType: usableOver.type,
+          overColumnId: usableOver.columnId,
           columnIds,
         })
-      : draftTasks ?? origin
+      : live
     setDraftTasks(next)
     const drop = resolvePersistedDrop(origin, next, activeId)
     if (drop) {

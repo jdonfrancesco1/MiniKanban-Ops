@@ -211,7 +211,7 @@ export function KanbanCard({
           }}
           style={style}
           className={cn(
-            "relative overflow-visible pl-1 touch-none",
+            "relative overflow-visible pl-1 touch-none select-none",
             "glassmorphic-card",
             dragDisabled ? "cursor-pointer" : "cursor-grab active:cursor-grabbing",
             isDragging && "shadow-lg ring-2 ring-white/20",
