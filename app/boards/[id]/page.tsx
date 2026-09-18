@@ -20,6 +20,7 @@ import {
   type OpsApiBoardPayload,
   type OpsBoardDiagnostics,
 } from "@/lib/ops-board"
+import { completedAtForColumnMove, placeTaskBefore } from "@/lib/kanban-dnd"
 import { filterTasksByProject, type ProjectFilterValue } from "@/lib/projects"
 import { Button } from "@/components/ui/button"
 import { ProjectFilter, ProjectLegend } from "@/components/project-chip"
@@ -56,9 +57,9 @@ export default function BoardPage() {
     return { board: hydrateOpsApiBoard(payload.board), diagnostics: payload.diagnostics ?? null }
   }, [])
 
-  const loadBoardData = useCallback(async () => {
+  const loadBoardData = useCallback(async (options?: { silent?: boolean }) => {
     try {
-      setIsLoading(true)
+      if (!options?.silent) setIsLoading(true)
       let apiBoard: Board | null = null
       let serverBoard: Board | null = null
 
@@ -92,7 +93,7 @@ export default function BoardPage() {
       toast({ title: "Error", description: "Failed to load board data.", variant: "destructive" })
       router.push("/boards")
     } finally {
-      setIsLoading(false)
+      if (!options?.silent) setIsLoading(false)
     }
   }, [applyBoard, boardId, fetchOpsJsonBoard, router, clearUndoAction, toast])
 
@@ -136,7 +137,7 @@ export default function BoardPage() {
     orderedColumnIds.splice(currentIndex, 1)
     orderedColumnIds.splice(newOrder, 0, columnId)
     await DBService.updateColumnOrder(resolvedBoardId, orderedColumnIds)
-    await loadBoardData()
+    await loadBoardData({ silent: true })
   }
 
   const handleTaskAdd = async (taskData: Partial<Task>, columnId: string) => {
@@ -190,11 +191,44 @@ export default function BoardPage() {
   const handleTaskMove = async (
     taskId: string,
     destinationColumnId: string,
-    newPosition: number,
+    beforeTaskId: string | null,
     sourceColumnId: string,
   ) => {
-    await DBService.moveTask(resolvedBoardId, sourceColumnId, taskId, destinationColumnId, newPosition)
-    await loadBoardData()
+    const previous = tasks
+    const completedAt = completedAtForColumnMove({
+      fromTitle: columns.find((column) => column.id === sourceColumnId)?.title,
+      toTitle: columns.find((column) => column.id === destinationColumnId)?.title,
+    })
+    const next = placeTaskBefore(tasks, {
+      taskId,
+      destColumnId: destinationColumnId,
+      beforeTaskId,
+      completedAt,
+    })
+    if (next === previous) return
+
+    setTasks(next)
+    try {
+      const destIndex = next
+        .filter((task) => String(task.columnId) === destinationColumnId)
+        .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+        .findIndex((task) => task.id === taskId)
+      await DBService.moveTask(
+        resolvedBoardId,
+        sourceColumnId,
+        taskId,
+        destinationColumnId,
+        destIndex < 0 ? 0 : destIndex,
+      )
+    } catch (error) {
+      console.error("Error moving task:", error)
+      setTasks(previous)
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to move task.",
+        variant: "destructive",
+      })
+    }
   }
 
   const visibleTasks = useMemo(
