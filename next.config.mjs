@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto"
+import { initOpenNextCloudflareForDev } from "@opennextjs/cloudflare"
 
 /**
  * Webpack Hash constructor: Node sha256, but skip null/undefined updates.
@@ -48,3 +49,8 @@ const nextConfig = {
 }
 
 export default nextConfig
+
+// OpenNext local-dev init. The helper returns immediately unless the Next dev
+// server has installed AsyncLocalStorage, so `next build` / the Worker build
+// do not start a Wrangler proxy.
+initOpenNextCloudflareForDev()
