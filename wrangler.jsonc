@@ -1,0 +1,26 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "minikanban-ops",
+  "main": ".open-next/worker.js",
+  // Set this to today's date when recreating the scaffold.
+  "compatibility_date": "2026-09-25",
+  "compatibility_flags": [
+    "nodejs_compat",
+    // See https://developers.cloudflare.com/workers/configuration/compatibility-flags/#global-fetch-strictly-public
+    "global_fetch_strictly_public"
+  ],
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+  "services": [
+    {
+      "binding": "WORKER_SELF_REFERENCE",
+      // Must match the worker name above.
+      "service": "minikanban-ops"
+    }
+  ],
+  "observability": {
+    "enabled": true
+  }
+}
