@@ -1,6 +1,6 @@
 import Link from "next/link"
 import { SiteHeader } from "@/components/site-header"
-import { MCP_ALIAS_PATH, MCP_AUTOSCALE_URL, MCP_PUBLIC_PATH } from "@/lib/mcp/lookup"
+import { MCP_ALIAS_PATH, MCP_AUTOSCALE_HOST, MCP_AUTOSCALE_URL, MCP_PUBLIC_PATH } from "@/lib/mcp/lookup"
 import { MCP_TOOL_NAMES } from "@/lib/mcp/tools"
 
 const CURSOR_SNIPPET = `{
@@ -43,8 +43,8 @@ export default function ConnectPage() {
             <div className="rounded-lg border border-white/10 bg-[#2a1b3e] p-6 space-y-3">
               <h2 className="text-xl font-semibold text-pink-400">Custom MCP URL</h2>
               <p className="text-white/70">
-                Streamable HTTP on Autoscale. Alias:{" "}
-                <code className="text-pink-300">https://mini-kanban-ops.replit.app{MCP_ALIAS_PATH}</code>
+                Streamable HTTP on the live Cloudflare worker. Alias:{" "}
+                <code className="text-pink-300">{`${MCP_AUTOSCALE_HOST}${MCP_ALIAS_PATH}`}</code>
                 .
               </p>
               <pre className="overflow-x-auto rounded-md bg-black/40 p-4 text-sm text-orange-100">
@@ -89,7 +89,7 @@ export default function ConnectPage() {
             <div className="rounded-lg border border-white/10 bg-[#2a1b3e] p-6 space-y-3">
               <h2 className="text-xl font-semibold text-pink-400">Grok Bot / Orca</h2>
               <p className="text-white/70">
-                AddMcpServer against the Autoscale URL. Store{" "}
+                AddMcpServer against the live MCP URL. Store{" "}
                 <code className="text-pink-300">OPS_BOARD_SECRET</code> on the connector, not in
                 tool args.
               </p>

@@ -167,13 +167,13 @@ Equivalent agent header: `-H "X-Ops-Board-Secret: $OPS_BOARD_SECRET"`.
 
 ## Remote MCP (Cursor / Grok Bot)
 
-Streamable HTTP on the Autoscale host. Same board and same `lib/api/ops.ts` helpers as `/api/ops/*`. The secret is **only** an HTTP header / connector env var — tools do not accept it.
+Streamable HTTP on the live Cloudflare worker. Same board and same `lib/api/ops.ts` helpers as `/api/ops/*`. The secret is **only** an HTTP header / connector env var — tools do not accept it.
 
 | | |
 | --- | --- |
-| URL | `https://mini-kanban-ops.replit.app/mcp` |
-| Alias | `https://mini-kanban-ops.replit.app/api/mcp` |
-| Docs | [`/connect`](https://mini-kanban-ops.replit.app/connect) |
+| URL | `https://minikanban-ops.giantmind.workers.dev/mcp` |
+| Alias | `https://minikanban-ops.giantmind.workers.dev/api/mcp` |
+| Docs | [`/connect`](https://minikanban-ops.giantmind.workers.dev/connect) |
 | Transport | Streamable HTTP (`POST` JSON-RPC) |
 | Auth | `Authorization: Bearer <OPS_BOARD_SECRET>` (or `X-Ops-Board-Secret`) |
 | Secret env | `OPS_BOARD_SECRET` — store on the MCP connector / Replit / Cursor server env |
@@ -197,7 +197,7 @@ Settings → MCP → Add new MCP server (Streamable HTTP), or `mcp.json`:
 {
   "mcpServers": {
     "minikanban-ops": {
-      "url": "https://mini-kanban-ops.replit.app/mcp",
+      "url": "https://minikanban-ops.giantmind.workers.dev/mcp",
       "headers": {
         "Authorization": "Bearer <OPS_BOARD_SECRET>"
       }
@@ -213,13 +213,13 @@ Do not put the secret in a tool argument or in chat. Use the connector header (o
 ```
 AddMcpServer
   name: minikanban-ops
-  url: https://mini-kanban-ops.replit.app/mcp
+  url: https://minikanban-ops.giantmind.workers.dev/mcp
   transport: streamable-http
   headers:
     Authorization: Bearer <OPS_BOARD_SECRET from connector env>
 ```
 
-After Autoscale publishes this revision, Orca should AddMcpServer against that URL and keep `OPS_BOARD_SECRET` in the connector env (same value as Replit / Publish Secrets). No SSH, no `psql`, no secret in tool args.
+Point Orca AddMcpServer at that workers.dev URL and keep `OPS_BOARD_SECRET` in the connector env. No SSH, no `psql`, no secret in tool args.
 
 Local: `http://localhost:3000/mcp` with the same Bearer header.
 

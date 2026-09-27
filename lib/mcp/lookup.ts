@@ -7,7 +7,7 @@ export const OPS_MCP_COLUMNS = OPS_COLUMN_TITLES
 export const DONE_COLUMN_TITLE = "Done"
 export const MCP_PUBLIC_PATH = "/mcp"
 export const MCP_ALIAS_PATH = "/api/mcp"
-export const MCP_AUTOSCALE_HOST = "https://mini-kanban-ops.replit.app"
+export const MCP_AUTOSCALE_HOST = "https://minikanban-ops.giantmind.workers.dev"
 export const MCP_AUTOSCALE_URL = `${MCP_AUTOSCALE_HOST}${MCP_PUBLIC_PATH}`
 
 export type OpsColumnTitle = (typeof OPS_COLUMN_TITLES)[number]
