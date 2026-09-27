@@ -5,6 +5,10 @@ import {
   findActiveTasksByTitle,
   isOpsBoardSlug,
   isOpsColumnTitle,
+  MCP_ALIAS_PATH,
+  MCP_AUTOSCALE_HOST,
+  MCP_AUTOSCALE_URL,
+  MCP_PUBLIC_PATH,
   presentOpsBoard,
 } from "./lookup.ts"
 import type { OpsApiBoard } from "../types.ts"
@@ -37,6 +41,13 @@ const board: OpsApiBoard = {
 }
 
 describe("ops MCP lookup", () => {
+  it("advertises the live workers.dev MCP URL", () => {
+    assert.equal(MCP_AUTOSCALE_HOST, "https://minikanban-ops.giantmind.workers.dev")
+    assert.equal(MCP_PUBLIC_PATH, "/mcp")
+    assert.equal(MCP_ALIAS_PATH, "/api/mcp")
+    assert.equal(MCP_AUTOSCALE_URL, `${MCP_AUTOSCALE_HOST}${MCP_PUBLIC_PATH}`)
+  })
+
   it("defaults and accepts the ops slug", () => {
     assert.equal(isOpsBoardSlug(undefined), true)
     assert.equal(isOpsBoardSlug("OPS"), true)

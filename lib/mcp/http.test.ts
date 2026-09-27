@@ -47,7 +47,7 @@ const SECRET = "ops-secret"
 
 function post(body: unknown, headers: Record<string, string> = {}) {
   return handleMcpHttp(
-    new Request("https://mini-kanban-ops.replit.app/mcp", {
+    new Request("https://minikanban-ops.giantmind.workers.dev/mcp", {
       method: "POST",
       headers: { "content-type": "application/json", ...headers },
       body: JSON.stringify(body),
@@ -65,7 +65,7 @@ describe("MCP HTTP auth", () => {
   })
 
   it("rejects GET without a secret", async () => {
-    const response = await handleMcpHttp(new Request("https://mini-kanban-ops.replit.app/mcp"), {
+    const response = await handleMcpHttp(new Request("https://minikanban-ops.giantmind.workers.dev/mcp"), {
       expectedSecret: SECRET,
       port,
     })
