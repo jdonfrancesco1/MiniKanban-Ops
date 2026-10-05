@@ -171,9 +171,9 @@ Streamable HTTP on the live Cloudflare worker. Same board and same `lib/api/ops.
 
 | | |
 | --- | --- |
-| URL | `https://minikanban-ops.giantmind.workers.dev/mcp` |
-| Alias | `https://minikanban-ops.giantmind.workers.dev/api/mcp` |
-| Docs | [`/connect`](https://minikanban-ops.giantmind.workers.dev/connect) |
+| URL | `https://minikanban-ops.productvision.workers.dev/mcp` |
+| Alias | `https://minikanban-ops.productvision.workers.dev/api/mcp` |
+| Docs | [`/connect`](https://minikanban-ops.productvision.workers.dev/connect) |
 | Transport | Streamable HTTP (`POST` JSON-RPC) |
 | Auth | `Authorization: Bearer <OPS_BOARD_SECRET>` (or `X-Ops-Board-Secret`) |
 | Secret env | `OPS_BOARD_SECRET` — store on the MCP connector / Replit / Cursor server env |
@@ -197,7 +197,7 @@ Settings → MCP → Add new MCP server (Streamable HTTP), or `mcp.json`:
 {
   "mcpServers": {
     "minikanban-ops": {
-      "url": "https://minikanban-ops.giantmind.workers.dev/mcp",
+      "url": "https://minikanban-ops.productvision.workers.dev/mcp",
       "headers": {
         "Authorization": "Bearer <OPS_BOARD_SECRET>"
       }
@@ -213,7 +213,7 @@ Do not put the secret in a tool argument or in chat. Use the connector header (o
 ```
 AddMcpServer
   name: minikanban-ops
-  url: https://minikanban-ops.giantmind.workers.dev/mcp
+  url: https://minikanban-ops.productvision.workers.dev/mcp
   transport: streamable-http
   headers:
     Authorization: Bearer <OPS_BOARD_SECRET from connector env>

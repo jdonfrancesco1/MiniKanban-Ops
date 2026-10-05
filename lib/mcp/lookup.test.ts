@@ -42,7 +42,7 @@ const board: OpsApiBoard = {
 
 describe("ops MCP lookup", () => {
   it("advertises the live workers.dev MCP URL", () => {
-    assert.equal(MCP_AUTOSCALE_HOST, "https://minikanban-ops.giantmind.workers.dev")
+    assert.equal(MCP_AUTOSCALE_HOST, "https://minikanban-ops.productvision.workers.dev")
     assert.equal(MCP_PUBLIC_PATH, "/mcp")
     assert.equal(MCP_ALIAS_PATH, "/api/mcp")
     assert.equal(MCP_AUTOSCALE_URL, `${MCP_AUTOSCALE_HOST}${MCP_PUBLIC_PATH}`)
