@@ -3,10 +3,12 @@
 import { and, asc, eq, isNotNull, isNull, ne, sql } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { boards, columns, tasks, type ColumnRow, type TaskRow } from "@/lib/db/schema"
+import { ensureFleetTenantColumns } from "@/lib/db/fleet-tenant"
 import {
   DEFAULT_BOARD_DESCRIPTION,
   DEFAULT_BOARD_SLUG,
   DEFAULT_BOARD_TITLE,
+  FLEET_TENANT_ID,
   OPS_COLUMN_TITLES,
 } from "@/lib/db/ops-defaults"
 import {
@@ -78,6 +80,7 @@ function mapTask(row: TaskRow): Task {
 }
 
 async function loadBoard(boardId: string): Promise<Board | null> {
+  await ensureFleetTenantColumns()
   const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(boardId)
 
   const [board] = await db
@@ -182,10 +185,23 @@ async function loadBoard(boardId: string): Promise<Board | null> {
   }
 }
 
+async function tenantIdForBoard(boardId: string) {
+  await ensureFleetTenantColumns()
+  const [board] = await db
+    .select({ tenantId: boards.tenantId })
+    .from(boards)
+    .where(eq(boards.id, boardId))
+    .limit(1)
+  if (!board) throw new Error("Board not found")
+  return board.tenantId
+}
+
 async function insertOpsColumns(boardId: string) {
+  const tenantId = await tenantIdForBoard(boardId)
   await db.insert(columns).values(
     OPS_COLUMN_TITLES.map((title, order) => ({
       boardId,
+      tenantId,
       title,
       order,
     })),
@@ -203,9 +219,11 @@ async function ensureOpsColumns(boardId: string) {
   if (missing.length === 0) return existing
 
   const nextOrder = existing.length === 0 ? 0 : existing[existing.length - 1].order + 1
+  const tenantId = await tenantIdForBoard(boardId)
   await db.insert(columns).values(
     missing.map((title, index) => ({
       boardId,
+      tenantId,
       title,
       order: nextOrder + index,
     })),
@@ -217,21 +235,22 @@ async function ensureOpsColumns(boardId: string) {
     .orderBy(asc(columns.order), asc(columns.createdAt))
 }
 
-async function stampOpsSlug(boardId: string) {
+async function stampOpsSlug(boardId: string, tenantId: string) {
   await db
     .update(boards)
     .set({ slug: null, updatedAt: now() })
-    .where(and(eq(boards.slug, DEFAULT_BOARD_SLUG), ne(boards.id, boardId)))
+    .where(and(eq(boards.tenantId, tenantId), eq(boards.slug, DEFAULT_BOARD_SLUG), ne(boards.id, boardId)))
   await db
     .update(boards)
     .set({ slug: DEFAULT_BOARD_SLUG, updatedAt: now() })
-    .where(eq(boards.id, boardId))
+    .where(and(eq(boards.id, boardId), eq(boards.tenantId, tenantId)))
 }
 
 async function reconcileOpsTasks(opsBoardId: string) {
+  const tenantId = await tenantIdForBoard(opsBoardId)
   const opsColumns = await ensureOpsColumns(opsBoardId)
-  const allColumns = await db.select().from(columns)
-  const allTasks = await db.select().from(tasks)
+  const allColumns = await db.select().from(columns).where(eq(columns.tenantId, tenantId))
+  const allTasks = await db.select().from(tasks).where(eq(tasks.tenantId, tenantId))
 
   const visibleOnOps = allTasks.filter(
     (task) => task.boardId === opsBoardId && !isTaskHiddenAsArchived(task.archivedAt, task.createdAt),
@@ -267,6 +286,7 @@ async function reconcileOpsTasks(opsBoardId: string) {
       .set({
         boardId: placement.boardId,
         columnId: placement.columnId,
+        tenantId,
         ...(placement.clearArchive ? { archivedAt: null } : {}),
         updatedAt: now(),
       })
@@ -330,8 +350,10 @@ async function withTaskSchemaColumns<T>(run: () => Promise<T>): Promise<T> {
     const missingBrief = isMissingRelationColumnError(error, "brief")
     const missingCompleted = isMissingRelationColumnError(error, "completed_at")
     const missingClose = isMissingRelationColumnError(error, "close_sub_status")
-    if (!missingBrief && !missingCompleted && !missingClose) throw error
+    const missingTenant = isMissingRelationColumnError(error, "tenant_id")
+    if (!missingBrief && !missingCompleted && !missingClose && !missingTenant) throw error
     await ensureTaskSchemaColumns()
+    if (missingTenant) await ensureFleetTenantColumns()
     return await run()
   }
 }
@@ -339,11 +361,14 @@ async function withTaskSchemaColumns<T>(run: () => Promise<T>): Promise<T> {
 /** Existing Done cards without completed_at use updated_at as a best-effort completion date. */
 export async function backfillCompletedAtFromUpdatedAt() {
   await ensureTaskCompletedAtColumn()
+  await ensureFleetTenantColumns()
   await db.execute(sql`
     UPDATE tasks t
     SET completed_at = t.updated_at
     FROM columns c
     WHERE t.column_id = c.id
+      AND t.tenant_id = ${FLEET_TENANT_ID}
+      AND c.tenant_id = ${FLEET_TENANT_ID}
       AND lower(btrim(c.title)) = 'done'
       AND t.completed_at IS NULL
   `)
@@ -367,7 +392,8 @@ async function completedAtForColumnChange(fromColumnId: string | null | undefine
 
 export async function backfillGiantSmokeCopy() {
   await ensureTaskSchemaColumns()
-  const rows = await db.select().from(tasks)
+  await ensureFleetTenantColumns()
+  const rows = await db.select().from(tasks).where(eq(tasks.tenantId, FLEET_TENANT_ID))
   let updated = 0
 
   for (const row of rows) {
@@ -400,14 +426,16 @@ export async function backfillGiantSmokeCopy() {
 export async function ensureDefaultBoard(): Promise<Board> {
   await requireOpsSession()
   await ensureTaskSchemaColumns()
+  await ensureFleetTenantColumns()
 
-  const boardRows = await db.select().from(boards)
+  const boardRows = await db.select().from(boards).where(eq(boards.tenantId, FLEET_TENANT_ID))
   const counts = await db
     .select({
       boardId: tasks.boardId,
       count: sql<number>`count(*)::int`,
     })
     .from(tasks)
+    .where(eq(tasks.tenantId, FLEET_TENANT_ID))
     .groupBy(tasks.boardId)
   const countByBoard = new Map(counts.map((row) => [String(row.boardId), Number(row.count)]))
 
@@ -425,7 +453,7 @@ export async function ensureDefaultBoard(): Promise<Board> {
 
   if (canonical) {
     if (canonical.slug !== DEFAULT_BOARD_SLUG) {
-      await stampOpsSlug(canonical.id)
+      await stampOpsSlug(canonical.id, FLEET_TENANT_ID)
     }
     if (canonical.title.trim().toLowerCase() !== DEFAULT_BOARD_TITLE.toLowerCase()) {
       await db
@@ -441,6 +469,7 @@ export async function ensureDefaultBoard(): Promise<Board> {
   const [created] = await db
     .insert(boards)
     .values({
+      tenantId: FLEET_TENANT_ID,
       title: DEFAULT_BOARD_TITLE,
       description: DEFAULT_BOARD_DESCRIPTION,
       slug: DEFAULT_BOARD_SLUG,
@@ -503,9 +532,11 @@ export async function createBoard(title: string, _useProjectPlanningTemplate = f
   await requireOpsSession()
   const trimmed = title.trim() || DEFAULT_BOARD_TITLE
 
+  await ensureFleetTenantColumns()
   const [created] = await db
     .insert(boards)
     .values({
+      tenantId: FLEET_TENANT_ID,
       title: trimmed,
       description: "",
     })
@@ -561,9 +592,10 @@ export async function addColumn(boardId: string, title: string) {
     .orderBy(asc(columns.order))
 
   const nextOrder = existing.length === 0 ? 0 : existing[existing.length - 1].order + 1
+  const tenantId = await tenantIdForBoard(boardId)
   const [created] = await db
     .insert(columns)
-    .values({ boardId, title: title.trim() || "Column", order: nextOrder })
+    .values({ boardId, tenantId, title: title.trim() || "Column", order: nextOrder })
     .returning()
 
   await touchBoard(boardId)
@@ -623,9 +655,11 @@ export async function restoreColumn(boardId: string, column: Column) {
     return { success: false, error: "Column already exists" }
   }
 
+  const tenantId = await tenantIdForBoard(boardId)
   await db.insert(columns).values({
     id: column.id,
     boardId,
+    tenantId,
     title: column.title,
     order: column.order,
   })
@@ -634,6 +668,7 @@ export async function restoreColumn(boardId: string, column: Column) {
     await db.insert(tasks).values({
       id: task.id,
       boardId,
+      tenantId,
       columnId: column.id,
       title: task.title,
       description: task.description ?? "",
@@ -663,6 +698,7 @@ export async function addTask(
   task: Omit<Task, "id" | "createdAt" | "updatedAt" | "createdBy">,
 ) {
   await requireOpsSession()
+  await ensureFleetTenantColumns()
 
   const [column] = await db
     .select()
@@ -702,6 +738,7 @@ export async function addTask(
       .values({
         boardId,
         columnId,
+        tenantId: column.tenantId,
         title,
         description,
         brief: smoke?.brief ?? task.brief ?? "",
@@ -817,9 +854,11 @@ export async function restoreTask(boardId: string, columnIdOrTaskId: string, tas
     if (!task) return { success: false, error: "Task not found" }
     const restoreColumnId = preferredColumnId || columnIdOrTaskId
     const restoreTitle = await columnTitleById(restoreColumnId)
+    const tenantId = await tenantIdForBoard(boardId)
     await db.insert(tasks).values({
       id: task.id,
       boardId,
+      tenantId,
       columnId: restoreColumnId,
       title: task.title,
       description: task.description ?? "",

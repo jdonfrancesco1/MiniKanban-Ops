@@ -86,11 +86,17 @@ npm run db:migrate
 # drizzle/0000_init.sql
 # drizzle/0001_task_brief.sql
 # drizzle/0002_task_completed_at.sql
+# drizzle/0003_task_close_sub_status.sql
+# drizzle/0004_tenant_id.sql
 ```
 
 The first authenticated load of `/boards` or `/boards/ops` creates the default **Ops** board with the four columns above. No seed script required.
 
-`tasks.created_at` is shown on every card. `tasks.completed_at` is stamped when a card enters **Done** and cleared if it leaves Done. Existing Done cards without `completed_at` are backfilled from `updated_at` as a best-effort completion date (not a true completion timestamp). Runtime `ALTER TABLE … ADD COLUMN IF NOT EXISTS` covers `brief` and `completed_at` the same way.
+`tasks.created_at` is shown on every card. `tasks.completed_at` is stamped when a card enters **Done** and cleared if it leaves Done. Existing Done cards without `completed_at` are backfilled from `updated_at` as a best-effort completion date (not a true completion timestamp). Runtime `ALTER TABLE … ADD COLUMN IF NOT EXISTS` covers `brief`, `completed_at`, and `close_sub_status` the same way.
+
+`drizzle/0004_tenant_id.sql` adds `tenant_id text` on `boards`, `columns`, and `tasks`. Existing rows are backfilled to the named fleet tenant `fleet` (blank tenants only; a board that already has a tenant id is left alone). Child rows copy `tenant_id` from their parent board. `board_id` foreign keys stay; composite foreign keys also require the child tenant to match its parent. Slug uniqueness is per tenant. The current single-secret ops path writes `fleet` on the server. It does not take a tenant from the query string, body, or a client header. There is no column default of `fleet`, so a later insert cannot silently land in the fleet tenant.
+
+That migration also drafts RLS policies (`tenant_id = current_setting('app.tenant_id', true)`). They are not enabled and not forced in this slice. With `app.tenant_id` unset, that predicate matches no rows. `FORCE ROW LEVEL SECURITY` would apply it to the table owner, which is the current fleet connection, and hide the fleet board. Slice C sets `app.tenant_id` from the verified credential before enabling and forcing RLS. The policies are SQL-only on purpose: putting them in the Drizzle schema makes `db:push` run `ENABLE ROW LEVEL SECURITY`. `npm run db:push` applies the columns, checks, and foreign keys. Run `0004` after that so the drafted policies exist (the file is safe to re-run). The ops-board self-heal adds and backfills `tenant_id` when the column is missing. It does not enable RLS. This is still one fleet board behind the existing secret, not a multi-customer sell path.
 
 `drizzle.config.ts` falls back to `postgresql://user:password@localhost:5432/minikanban_ops` only so `drizzle-kit` can start without a live Neon account. That placeholder is not a real database.
 
