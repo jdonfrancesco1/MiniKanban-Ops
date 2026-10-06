@@ -8,7 +8,8 @@
 -- and is not a verifier that opens customer tenants.
 --
 -- No ENABLE ROW LEVEL SECURITY, no FORCE, no GRANT.
--- App-level tenant checks are Slice C. FORCE RLS is a later follow-on.
+-- App-level tenant checks are Slice C. Forced row security for boards,
+-- columns, and tasks is drizzle/0006_force_rls.sql and does not apply here.
 -- Safe to re-run. This file does not insert secrets.
 
 CREATE TABLE IF NOT EXISTS tenant_credentials (

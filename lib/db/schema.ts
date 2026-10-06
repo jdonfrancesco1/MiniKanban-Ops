@@ -17,9 +17,10 @@ import {
  * fleet board can use the named key `fleet`). Board id stays a row id inside
  * a tenant; it is not a tenant boundary. FKs on board_id / column_id stay.
  * Composite FKs keep each child in the same tenant as its parent.
- * RLS policies are drafted in drizzle/0004_tenant_id.sql and are not enabled here.
- * They are intentionally absent from this Drizzle schema: drizzle-kit enables RLS
- * when a table has policies, and this slice must not enable or force RLS.
+ * Row policies are drafted in drizzle/0004_tenant_id.sql and forced in
+ * drizzle/0006_force_rls.sql. They are intentionally absent from this Drizzle
+ * schema: drizzle-kit enables row security when a table has policies, and
+ * db:push must not be the switch that turns that on.
  */
 
 export const boards = pgTable(

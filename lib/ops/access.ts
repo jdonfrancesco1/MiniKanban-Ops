@@ -2,7 +2,9 @@ import type { OpsApiBoard, OpsApiTask } from "../types.ts"
 import type { OpsToolPort } from "../mcp/tools.ts"
 
 /**
- * App-level tenant boundary (Slice C). FORCE RLS is a later follow-on.
+ * App-level tenant boundary (Slice C). These checks stay.
+ * Database owner enforcement is drizzle/0006_force_rls.sql.
+ * This module does not replace that control.
  * Tenant id comes only from a verified session or bearer. Query params,
  * JSON tenant fields, and client tenant headers are not authority.
  */

@@ -12,13 +12,15 @@
 -- copy tenant_id from their parent board, then are realigned if they disagree with that board.
 -- A board that already has a non-blank tenant_id is left alone (safe to re-run).
 --
--- RLS policies are created and intentional. ENABLE ROW LEVEL SECURITY and
--- FORCE ROW LEVEL SECURITY stay deferred (follow-on after app-level Slice C).
--- Do not enable them in this file.
--- Enabling RLS before app.tenant_id is set from the verified credential
--- would fail closed (unset current_setting matches no rows). FORCE would apply that
--- to the table owner, which is the current fleet connection, and would hide the fleet board.
--- With RLS disabled, these policies are inert and the single-secret fleet path is unchanged.
+-- RLS policies are created here and left inert. ENABLE ROW LEVEL SECURITY and
+-- FORCE ROW LEVEL SECURITY are not in this file. They ship in
+-- drizzle/0006_force_rls.sql (Slice D), after Slice C app checks.
+-- Do not enable or force them in this file.
+-- With RLS disabled, these policies are inert.
+-- Enabling before app.tenant_id is set from the verified credential
+-- fails closed (unset current_setting matches no rows). FORCE applies that
+-- to the table owner. 0006 is the file that does so, and the app sets the
+-- tenant inside each transaction so the fleet board stays visible.
 -- Slice C predicate (do not invent a second one): tenant_id = current_setting('app.tenant_id', true)
 -- Set it only inside the transaction from verified auth, for example:
 --   SELECT set_config('app.tenant_id', <verified tenant id>, true);
@@ -121,7 +123,8 @@ COMMENT ON COLUMN boards.tenant_id IS 'Tenant key. The existing fleet board is t
 COMMENT ON COLUMN columns.tenant_id IS 'Same tenant as the parent board (columns_board_tenant_fk).';
 COMMENT ON COLUMN tasks.tenant_id IS 'Same tenant as the parent board and column (tasks_board_tenant_fk, tasks_column_tenant_fk).';
 
--- Drafted policies. Inert until the FORCE RLS follow-on after app-level Slice C.
+-- Drafted policies. Inert in this file. Slice D activates them in
+-- drizzle/0006_force_rls.sql. Slice C app checks do not replace that.
 DROP POLICY IF EXISTS boards_tenant_isolation ON boards;
 CREATE POLICY boards_tenant_isolation ON boards
   FOR ALL
@@ -140,12 +143,5 @@ CREATE POLICY tasks_tenant_isolation ON tasks
   USING (tenant_id = current_setting('app.tenant_id', true))
   WITH CHECK (tenant_id = current_setting('app.tenant_id', true));
 
--- FORCE RLS follow-on after app-level Slice C (not run here):
---   ALTER TABLE boards ENABLE ROW LEVEL SECURITY;
---   ALTER TABLE boards FORCE ROW LEVEL SECURITY;
---   ALTER TABLE columns ENABLE ROW LEVEL SECURITY;
---   ALTER TABLE columns FORCE ROW LEVEL SECURITY;
---   ALTER TABLE tasks ENABLE ROW LEVEL SECURITY;
---   ALTER TABLE tasks FORCE ROW LEVEL SECURITY;
--- And set app.tenant_id from the verified fleet credential before FORCE, or the fleet board disappears.
+-- ENABLE and FORCE are not executed here. See drizzle/0006_force_rls.sql.
 -- Slice B follow-up: per-tenant credential verifiers. This migration does not store secrets.
