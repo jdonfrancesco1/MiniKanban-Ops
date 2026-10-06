@@ -1,6 +1,6 @@
 import {
   OPS_SESSION_COOKIE,
-  isAuthGateEnabled,
+  isFleetDevGateOpen,
   verifyOpsSecret,
   verifySessionToken,
 } from "@/lib/auth/token"
@@ -23,15 +23,20 @@ export function getPresentedOpsSecret(headerSource: HeaderSource): string | null
   return headerSecret || null
 }
 
+/**
+ * Fleet routes only. Customer cookies (v1.) and non-fleet bearers fail closed,
+ * including when the local dev gate would otherwise be open.
+ * Tenant is not read from the URL or from client headers.
+ */
 export async function isOpsRequestAuthorized(request: {
   cookies?: CookieSource
   headers: HeaderSource
 }): Promise<boolean> {
-  if (!isAuthGateEnabled()) return true
-
-  const cookie = request.cookies?.get(OPS_SESSION_COOKIE)?.value
-  if (await verifySessionToken(cookie)) return true
-
   const presented = getPresentedOpsSecret(request.headers)
+  const cookie = request.cookies?.get(OPS_SESSION_COOKIE)?.value
+  if (cookie?.startsWith("v1.")) return false
+  if (presented && !verifyOpsSecret(presented)) return false
+  if (isFleetDevGateOpen()) return true
+  if (cookie && (await verifySessionToken(cookie))) return true
   return presented ? verifyOpsSecret(presented) : false
 }

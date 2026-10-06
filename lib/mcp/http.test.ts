@@ -1,5 +1,6 @@
 import assert from "node:assert/strict"
 import { describe, it } from "node:test"
+import { createTenantCredential } from "../auth/credentials.ts"
 import type { OpsApiBoard, OpsApiTask } from "../types.ts"
 import { handleMcpHttp } from "./http.ts"
 import type { OpsToolPort } from "./tools.ts"
@@ -81,6 +82,43 @@ describe("MCP HTTP auth", () => {
     const payload = (await response.json()) as { result: { serverInfo: { name: string } } }
     assert.equal(payload.result.serverInfo.name, "minikanban-ops")
     assert.ok(response.headers.get("mcp-session-id"))
+  })
+
+  it("does not let a customer secret open the fleet board", async () => {
+    const customer = await createTenantCredential("alpha")
+    let calls = 0
+    const counting: OpsToolPort = {
+      async listBoard() {
+        calls += 1
+        return port.listBoard()
+      },
+      insertTask: port.insertTask,
+      resolveTask: port.resolveTask,
+      moveTask: port.moveTask,
+      updateTask: port.updateTask,
+      archiveTask: port.archiveTask,
+    }
+    const response = await handleMcpHttp(
+      new Request("https://minikanban-ops.productvision.workers.dev/mcp", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${customer.secret}`,
+        },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: 1,
+          method: "tools/call",
+          params: { name: "list_board", arguments: {} },
+        }),
+      }),
+      { expectedSecret: SECRET, port: counting, customerCredentials: [customer.record] },
+    )
+    assert.equal(response.status, 403)
+    const payload = (await response.json()) as { error: string }
+    assert.equal(payload.error, "Forbidden")
+    assert.equal(calls, 0)
+    assert.equal(JSON.stringify(payload).includes(customer.secret), false)
   })
 
   it("does not accept the secret as a JSON-RPC / tool argument", async () => {

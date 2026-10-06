@@ -29,6 +29,10 @@ describe("MCP auth", () => {
   it("accepts Authorization Bearer matching OPS_BOARD_SECRET", () => {
     const result = authorizeMcpRequest(headers({ authorization: "Bearer ops-secret" }), "ops-secret")
     assert.equal(result.ok, true)
+    if (result.ok) {
+      assert.equal(result.tenantId, "fleet")
+      assert.equal(result.uid, "ops")
+    }
   })
 
   it("accepts the existing X-Ops-Board-Secret header", () => {
@@ -39,5 +43,18 @@ describe("MCP auth", () => {
   it("stays open when no server secret is configured", () => {
     const result = authorizeMcpRequest(headers({}), "")
     assert.equal(result.ok, true)
+    if (result.ok) assert.equal(result.tenantId, "fleet")
+  })
+
+  it("fails closed in production when the fleet secret is unset", () => {
+    const previous = process.env.NODE_ENV
+    process.env.NODE_ENV = "production"
+    try {
+      const result = authorizeMcpRequest(headers({}), "")
+      assert.equal(result.ok, false)
+      if (!result.ok) assert.equal(result.status, 401)
+    } finally {
+      process.env.NODE_ENV = previous
+    }
   })
 })
