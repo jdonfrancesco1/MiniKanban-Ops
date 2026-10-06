@@ -13,6 +13,7 @@ export async function POST(request: Request, context: RouteContext) {
       columnId?: unknown
       position?: unknown
       beforeTaskId?: unknown
+      closeSubStatus?: unknown
     }
     if (body.columnTitle !== undefined && typeof body.columnTitle !== "string") {
       return NextResponse.json({ error: "columnTitle must be a string" }, { status: 400 })
@@ -26,6 +27,9 @@ export async function POST(request: Request, context: RouteContext) {
     if (body.beforeTaskId !== undefined && body.beforeTaskId !== null && typeof body.beforeTaskId !== "string") {
       return NextResponse.json({ error: "beforeTaskId must be a string or null" }, { status: 400 })
     }
+    if (body.closeSubStatus !== undefined && body.closeSubStatus !== null && typeof body.closeSubStatus !== "string") {
+      return NextResponse.json({ error: "closeSubStatus must be a string" }, { status: 400 })
+    }
     if (!body.columnTitle && !body.columnId) {
       return NextResponse.json({ error: "columnTitle or columnId is required" }, { status: 400 })
     }
@@ -36,6 +40,7 @@ export async function POST(request: Request, context: RouteContext) {
         columnId: body.columnId,
         position: body.position,
         beforeTaskId: body.beforeTaskId ?? null,
+        closeSubStatus: body.closeSubStatus,
       }),
     )
   } catch (error) {

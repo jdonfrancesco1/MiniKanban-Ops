@@ -23,6 +23,8 @@ export type Task = {
   updatedAt?: string
   /** Set when the card enters Done; cleared if it leaves Done. */
   completedAt?: string | null
+  /** Closed | No Longer Needed | Duplicate. Null until the card is closed into Done. */
+  closeSubStatus?: string | null
   createdBy?: string
   archivedAt?: number
   columnId?: string
@@ -167,6 +169,8 @@ export type OpsApiTask = {
   createdAt?: string
   updatedAt?: string
   completedAt?: string | null
+  /** Closed | No Longer Needed | Duplicate. Null until the card is closed into Done. */
+  closeSubStatus?: string | null
 }
 
 export type OpsApiColumn = {
@@ -211,6 +215,7 @@ function mapApiTask(task: OpsApiTask, columnId: string, boardId: string): Task {
     createdAt: task.createdAt,
     updatedAt: task.updatedAt,
     completedAt: task.completedAt ?? null,
+    closeSubStatus: task.closeSubStatus ?? null,
   }
 }
 

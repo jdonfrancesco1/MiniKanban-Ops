@@ -10,12 +10,15 @@ import {
 import { requireOpsSession } from "@/lib/auth/session"
 import { fingerprintProcessDatabase } from "@/lib/db/fingerprint"
 import { OPS_COLUMN_TITLES } from "@/lib/db/ops-defaults"
+import { isCloseSubStatus } from "@/lib/close-sub-status"
 import {
   DONE_COLUMN_TITLE,
   findActiveTaskByTitle,
   findActiveTasksByTitle,
   normalizeOpsTitle,
 } from "@/lib/mcp/lookup"
+import { requireTaskDescription } from "@/lib/task-description"
+import { isDoneColumnTitle } from "@/lib/task-dates"
 import type { OpsApiBoard, OpsApiTask, OpsBoardDiagnostics } from "@/lib/ops-board"
 import { getTaskProject, upsertProjectLabel } from "@/lib/projects"
 import { findTasksByRef, taskShortId } from "@/lib/task-short-id"
@@ -39,6 +42,7 @@ export function serializeOpsTask(task: Task): OpsApiTask {
     createdAt: task.createdAt,
     updatedAt: task.updatedAt,
     completedAt: task.completedAt ?? null,
+    closeSubStatus: task.closeSubStatus ?? null,
   }
 }
 
@@ -86,7 +90,7 @@ export function opsApiError(error: unknown) {
   if (/not found/i.test(message)) {
     return NextResponse.json({ error: message }, { status: 404 })
   }
-  if (/required/i.test(message)) {
+  if (/required|must be one of/i.test(message)) {
     return NextResponse.json({ error: message }, { status: 400 })
   }
   return NextResponse.json({ error: message }, { status: 500 })
@@ -183,6 +187,7 @@ export async function createOpsTask(input: {
   labels?: string[]
   brief?: string
   description?: string
+  closeSubStatus?: string | null
 }) {
   await requireOpsApi()
   const title = input.title.trim()
@@ -207,15 +212,17 @@ export async function createOpsTask(input: {
     throw new Error("Column not found")
   }
 
+  const description = requireTaskDescription(input.description)
   const labels = projectLabelsForTask({ title, labels: input.labels })
 
   const task = await addTask(board.id, column.id, {
     title,
-    description: input.description ?? "",
+    description,
     brief: input.brief ?? "",
     labels,
     columnId: column.id,
     boardId: board.id,
+    closeSubStatus: input.closeSubStatus,
   })
   if (!task) {
     throw new Error("Failed to create task")
@@ -226,7 +233,13 @@ export async function createOpsTask(input: {
 
 export async function moveOpsTask(
   taskId: string,
-  input: { columnId?: string; columnTitle?: string; position?: number; beforeTaskId?: string | null },
+  input: {
+    columnId?: string
+    columnTitle?: string
+    position?: number
+    beforeTaskId?: string | null
+    closeSubStatus?: string | null
+  },
 ) {
   await requireOpsApi()
   if (!input.columnId && !input.columnTitle?.trim()) {
@@ -258,14 +271,26 @@ export async function moveOpsTask(
     destIndex = index >= 0 ? index : dest.length
   }
 
-  await moveTask(board.id, task.columnId, task.id, column.id, destIndex)
-  const updated = (await getTaskById(task.id)) ?? { ...task, columnId: column.id }
+  await moveTask(board.id, task.columnId, task.id, column.id, destIndex, {
+    closeSubStatus: input.closeSubStatus,
+  })
+  const updated = (await getTaskById(task.id)) ?? {
+    ...task,
+    columnId: column.id,
+    closeSubStatus: input.closeSubStatus ?? task.closeSubStatus ?? null,
+  }
   return { task: serializeOpsTask(updated) }
 }
 
 export async function patchOpsTask(
   taskId: string,
-  input: { title?: string; description?: string; brief?: string; labels?: string[] },
+  input: {
+    title?: string
+    description?: string
+    brief?: string
+    labels?: string[]
+    closeSubStatus?: string | null
+  },
 ) {
   await requireOpsApi()
   const title = input.title?.trim()
@@ -273,11 +298,18 @@ export async function patchOpsTask(
   const hasDescription = typeof input.description === "string"
   const hasBrief = typeof input.brief === "string"
   const hasLabels = Array.isArray(input.labels)
-  if (!hasTitle && !hasDescription && !hasBrief && !hasLabels) {
-    throw new Error("title, description, brief, or labels is required")
+  const hasCloseSubStatus = input.closeSubStatus !== undefined
+  if (!hasTitle && !hasDescription && !hasBrief && !hasLabels && !hasCloseSubStatus) {
+    throw new Error("title, description, brief, labels, or closeSubStatus is required")
   }
   if (hasTitle && !title) {
     throw new Error("Title is required")
+  }
+  if (hasDescription) {
+    requireTaskDescription(input.description)
+  }
+  if (hasCloseSubStatus && input.closeSubStatus !== null && !isCloseSubStatus(input.closeSubStatus)) {
+    throw new Error("closeSubStatus must be one of: Closed, No Longer Needed, Duplicate")
   }
 
   const board = await ensureDefaultBoard()
@@ -288,12 +320,19 @@ export async function patchOpsTask(
 
   const nextTitle = hasTitle ? title! : existing.title
   const labels = hasLabels ? projectLabelsForTask({ title: nextTitle, labels: input.labels }) : undefined
+  if (hasCloseSubStatus && input.closeSubStatus) {
+    const column = findOpsColumn(board, { columnId: existing.columnId })
+    if (!isDoneColumnTitle(column?.title)) {
+      throw new Error("closeSubStatus is required only after the task is in Done. Move it to Done with closeSubStatus.")
+    }
+  }
 
   const result = await updateTask(board.id, existing.columnId, taskId, {
     ...(hasTitle ? { title } : {}),
     ...(hasDescription ? { description: input.description } : {}),
     ...(hasBrief ? { brief: input.brief } : {}),
     ...(hasLabels ? { labels } : {}),
+    ...(hasCloseSubStatus ? { closeSubStatus: input.closeSubStatus } : {}),
   })
   if (!result.success) {
     throw new Error(result.error || "Task not found")
@@ -306,8 +345,8 @@ export async function patchOpsTask(
   return { task: serializeOpsTask(updated) }
 }
 
-export async function completeOpsTask(taskId: string) {
-  return moveOpsTask(taskId, { columnTitle: DONE_COLUMN_TITLE })
+export async function completeOpsTask(taskId: string, closeSubStatus: string) {
+  return moveOpsTask(taskId, { columnTitle: DONE_COLUMN_TITLE, closeSubStatus })
 }
 
 export async function archiveOpsTask(taskId: string) {

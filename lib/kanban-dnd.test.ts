@@ -78,6 +78,16 @@ describe("placeTask / placeTaskBefore", () => {
     assert.deepEqual(idsIn("need", next), ["hidden", "visible-1", "moving", "visible-2"])
   })
 
+  it("stamps closeSubStatus when the caller provides it", () => {
+    const next = placeTask(board(), {
+      taskId: "a",
+      destColumnId: "done",
+      destIndex: 99,
+      closeSubStatus: "No Longer Needed",
+    })
+    assert.equal(next.find((item) => item.id === "a")?.closeSubStatus, "No Longer Needed")
+  })
+
   it("stamps completedAt when the caller provides it", () => {
     const next = placeTask(board(), {
       taskId: "a",

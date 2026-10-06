@@ -47,6 +47,7 @@ export type PresentedOpsTask = {
   labels: string[]
   createdAt: string | null
   completedAt: string | null
+  closeSubStatus: string | null
 }
 
 export type PresentedOpsBoard = {
@@ -72,6 +73,7 @@ export function presentOpsTask(task: OpsApiTask, columnTitle: string): Presented
     labels: Array.isArray(task.labels) ? task.labels : [],
     createdAt: task.createdAt ?? null,
     completedAt: task.completedAt ?? null,
+    closeSubStatus: task.closeSubStatus ?? null,
   }
 }
 

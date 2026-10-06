@@ -126,7 +126,7 @@ Missing or wrong credentials return `401` JSON: `{ "error": "Unauthorized" }`. I
 
 ### `GET /api/ops/board`
 
-Ensures the default Ops board exists. Returns `{ board: { id, title, slug, columns: [{ id, title, order, tasks: [{ id, title, description, brief, order, columnId, createdAt, completedAt }] }] } }`.
+Ensures the default Ops board exists. Returns `{ board: { id, title, slug, columns: [{ id, title, order, tasks: [{ id, title, description, brief, order, columnId, createdAt, completedAt, closeSubStatus }] }] } }`. `closeSubStatus` is `Closed`, `No Longer Needed`, `Duplicate`, or `null` until the card is closed into Done.
 
 ```bash
 curl -sS http://localhost:3000/api/ops/board \
@@ -135,28 +135,28 @@ curl -sS http://localhost:3000/api/ops/board \
 
 ### `POST /api/ops/tasks`
 
-Body `{ "title": "…", "columnTitle": "Need you", "brief": "…", "description": "…" }`. `columnTitle` is optional and defaults to **Need you**. Creates the card at the end of that column. Returns `{ task, columnId }`.
+Body `{ "title": "…", "columnTitle": "Need you", "brief": "…", "description": "…" }`. `columnTitle` is optional and defaults to **Need you**. `description` is required on create: empty text and the placeholder "No description yet. Edit the card to add the full ask." are rejected. Existing cards with an empty description are left as they are. Creates the card at the end of that column. Returns `{ task, columnId }`. Creating straight into **Done** also requires `closeSubStatus`.
 
 ```bash
 curl -sS http://localhost:3000/api/ops/tasks \
   -H "Authorization: Bearer $OPS_BOARD_SECRET" \
   -H "Content-Type: application/json" \
-  -d '{"title":"Follow up with James"}'
+  -d '{"title":"Follow up with James","description":"Send James the Paylyte page and ask for PASS or a fail note."}'
 ```
 
 ### `POST /api/ops/tasks/:id/move`
 
-Body `{ "columnTitle": "I'm on" }` or `{ "columnId": "…" }`. Moves the card to the end of that column. Returns `{ task }`.
+Body `{ "columnTitle": "I'm on" }` or `{ "columnId": "…" }`. Moves the card to the end of that column. Returns `{ task }`. Moving into **Done** requires `closeSubStatus`: `Closed`, `No Longer Needed`, or `Duplicate`. Leaving Done clears it. Existing Done cards stay `null` until someone closes them again with a reason.
 
 ```bash
 curl -sS http://localhost:3000/api/ops/tasks/TASK_ID/move \
   -H "Authorization: Bearer $OPS_BOARD_SECRET" \
   -H "Content-Type: application/json" \
-  -d "{\"columnTitle\":\"I'm on\"}"
+  -d "{\"columnTitle\":\"Done\",\"closeSubStatus\":\"Closed\"}"
 ```
 
-Optional: `PATCH /api/ops/tasks/:id` with `{ "title" }`, `{ "brief" }`, and/or `{ "description" }`.
-`brief` is the 1–2 line card-face summary. `description` is the full ask James sees when he opens the card.
+Optional: `PATCH /api/ops/tasks/:id` with `{ "title" }`, `{ "brief" }`, `{ "description" }`, and/or `{ "closeSubStatus" }`.
+`brief` is the 1–2 line card-face summary. `description` is the full ask James sees when he opens the card. Sending `description` must be a real ask (empty or placeholder text is rejected); omit it to leave the current text, including a legacy empty description. `closeSubStatus` can be changed only while the card is already in Done.
 
 Equivalent agent header: `-H "X-Ops-Board-Secret: $OPS_BOARD_SECRET"`.
 
@@ -182,12 +182,12 @@ Streamable HTTP on the live Cloudflare worker. Same board and same `lib/api/ops.
 
 | Tool | What it does |
 | --- | --- |
-| `list_board` | Columns + tasks for slug `ops` (default): title, brief, description, column, project labels, createdAt, completedAt |
-| `insert_task` | Column title + title (+ optional brief / description / labels). Skips if an active task with the same title exists |
-| `move_task` | By title or id → `Need you` \| `I'm on` \| `Waiting` \| `Done` |
-| `done_task` | Move to Done (stamps `completed_at`) |
-| `archive_task` | Soft archive |
-| `update_task` | title / brief / description / labels |
+| `list_board` | Columns + tasks for slug `ops` (default): title, brief, description, column, project labels, createdAt, completedAt, closeSubStatus |
+| `insert_task` | Column title + title + **description** (+ optional brief / labels). Description is the full ask; empty or placeholder text is rejected. Skips if an active task with the same title exists (does not overwrite — use `update_task` to fill an empty description). `closeSubStatus` is required when `columnTitle` is Done |
+| `move_task` | By title or id → `Need you` \| `I'm on` \| `Waiting` \| `Done`. Done requires `closeSubStatus` |
+| `done_task` | Move to Done. Requires `closeSubStatus`: `Closed` \| `No Longer Needed` \| `Duplicate`. Stamps `completed_at` and stores the close sub-status |
+| `archive_task` | Soft archive (does not set a close sub-status) |
+| `update_task` | title / brief / description / labels / closeSubStatus. A sent description must be a real ask. `closeSubStatus` only on a card already in Done |
 
 ### Cursor
 
@@ -223,7 +223,7 @@ Point Orca AddMcpServer at that workers.dev URL and keep `OPS_BOARD_SECRET` in t
 
 Local: `http://localhost:3000/mcp` with the same Bearer header.
 
-Card face: project chip · decoded title · brief · muted `Created Sep 14`. Done cards also show `Completed Sep 15`. Dates use America/New_York short format (detail/edit: `Sep 15, 2026`). Click opens the full description. Columns scroll so card bottoms are not clipped. Project colors: Giant blue, Paylyte orange, MiniKanban purple/teal, Hangar 18 green, Off Replit slate, Security red, Marketing magenta, Jimbo gold.
+Card face: project chip · decoded title · brief · muted `Created Sep 14`. Done cards also show `Completed Sep 15` and the close sub-status (`Closed`, `No Longer Needed`, or `Duplicate`) when one is set. Dates use America/New_York short format (detail/edit: `Sep 15, 2026`). Click opens the full description and close status. Dragging a card into Done, or Mark done on the detail view, asks for that close status before the move is saved. Columns scroll so card bottoms are not clipped. Project colors: Giant blue, Paylyte orange, MiniKanban purple/teal, Hangar 18 green, Off Replit slate, Security red, Marketing magenta, Jimbo gold.
 
 ## Out of scope
 

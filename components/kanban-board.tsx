@@ -23,9 +23,13 @@ import {
   pickPreferredCollision,
   resolvePersistedDrop,
   sortByOrder,
+  type PersistedTaskDrop,
 } from "@/lib/kanban-dnd"
+import { isDoneColumnTitle } from "@/lib/task-dates"
+import type { CloseSubStatus } from "@/lib/close-sub-status"
 import { KanbanColumn } from "./kanban-column"
 import { KanbanDragOverlay } from "./kanban-card"
+import { CloseSubStatusDialog } from "./close-sub-status-dialog"
 
 interface KanbanBoardProps {
   columns: DbColumn[]
@@ -34,10 +38,17 @@ interface KanbanBoardProps {
   onColumnAdd: (title: string) => void
   onColumnUpdate: (columnId: string, newTitle: string) => void
   onColumnDelete: (columnId: string) => void
-  onTaskAdd: (taskData: Partial<DbTask>, columnId: string) => void
+  onTaskAdd: (taskData: Partial<DbTask>, columnId: string) => void | Promise<void>
   onTaskUpdate: (task: DbTask) => void
   onTaskDelete: (taskId: string, columnId: string) => void
-  onTaskMove: (taskId: string, newColumnId: string, beforeTaskId: string | null, oldColumnId: string) => void
+  onTaskMove: (
+    taskId: string,
+    newColumnId: string,
+    beforeTaskId: string | null,
+    oldColumnId: string,
+    closeSubStatus?: CloseSubStatus | null,
+  ) => void
+  onCloseSubStatus?: (taskId: string, closeSubStatus: CloseSubStatus) => void
   onColumnMove: (columnId: string, newPosition: number) => void
   readOnly?: boolean
   stickers?: PlacedSticker[]
@@ -70,6 +81,7 @@ export function KanbanBoard({
   onTaskUpdate,
   onTaskDelete,
   onTaskMove,
+  onCloseSubStatus,
   onColumnMove,
   readOnly = false,
 }: KanbanBoardProps) {
@@ -77,6 +89,7 @@ export function KanbanBoard({
   const [dragKind, setDragKind] = useState<DragKind | null>(null)
   const [draftTasks, setDraftTasks] = useState<DbTask[] | null>(null)
   const [overColumnId, setOverColumnId] = useState<string | null>(null)
+  const [pendingDoneDrop, setPendingDoneDrop] = useState<PersistedTaskDrop | null>(null)
 
   const dragKindRef = useRef<DragKind | null>(null)
   const dragStartTasksRef = useRef<DbTask[]>(propTasks || [])
@@ -200,9 +213,14 @@ export function KanbanBoard({
       : live
     setDraftTasks(next)
     const drop = resolvePersistedDrop(origin, next, activeId)
-    if (drop) {
-      onTaskMove(drop.taskId, drop.destColumnId, drop.beforeTaskId, drop.sourceColumnId)
+    if (!drop) return
+    const destTitle = currentColumns.find((column) => column.id === drop.destColumnId)?.title
+    const sourceTitle = currentColumns.find((column) => column.id === drop.sourceColumnId)?.title
+    if (isDoneColumnTitle(destTitle) && !isDoneColumnTitle(sourceTitle)) {
+      setPendingDoneDrop(drop)
+      return
     }
+    onTaskMove(drop.taskId, drop.destColumnId, drop.beforeTaskId, drop.sourceColumnId)
   }
 
   const handleDragEnd = (event: DragEndEvent) => {
@@ -289,11 +307,21 @@ export function KanbanBoard({
                   readOnly={readOnly}
                   onDeleteColumn={() => onColumnDelete(column.id)}
                   onRenameColumn={(columnId, title) => onColumnUpdate(columnId, title)}
-                  onAddTask={(columnId, title, labels) =>
-                    onTaskAdd({ title, description: "", brief: "", labels: labels ?? [] }, columnId)
+                  onAddTask={(columnId, title, labels, description, closeSubStatus) =>
+                    onTaskAdd(
+                      {
+                        title,
+                        description: description ?? "",
+                        brief: "",
+                        labels: labels ?? [],
+                        closeSubStatus,
+                      },
+                      columnId,
+                    )
                   }
                   onTaskDelete={(columnId, taskId) => onTaskDelete(taskId, columnId)}
                   onTaskUpdate={onTaskUpdate}
+                  onCloseSubStatus={onCloseSubStatus}
                 />
               )
             })}
@@ -312,6 +340,25 @@ export function KanbanBoard({
           {activeTask ? <KanbanDragOverlay task={activeTask} /> : null}
         </DragOverlay>
       </DndContext>
+      <CloseSubStatusDialog
+        open={pendingDoneDrop !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setPendingDoneDrop(null)
+            setDraftTasks(null)
+          }
+        }}
+        title="Move to Done"
+        description="Pick a close status before this card lands in Done."
+        confirmLabel="Move to Done"
+        onConfirm={(status) => {
+          const drop = pendingDoneDrop
+          setPendingDoneDrop(null)
+          setDraftTasks(null)
+          if (!drop) return
+          onTaskMove(drop.taskId, drop.destColumnId, drop.beforeTaskId, drop.sourceColumnId, status)
+        }}
+      />
     </div>
   )
 }

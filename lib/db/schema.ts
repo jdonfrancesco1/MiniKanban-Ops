@@ -36,6 +36,8 @@ export const tasks = pgTable("tasks", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   completedAt: timestamp("completed_at", { withTimezone: true }),
+  /** Closed | No Longer Needed | Duplicate. Null until the card is closed into Done. */
+  closeSubStatus: text("close_sub_status"),
 })
 
 export type BoardRow = typeof boards.$inferSelect

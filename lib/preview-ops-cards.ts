@@ -98,6 +98,7 @@ export function buildOpsCardPreviewTasks(): Task[] {
       order: 26,
       createdAt: "2026-09-14T16:00:00.000Z",
       completedAt: "2026-09-15T16:00:00.000Z",
+      closeSubStatus: "Closed",
     },
   ]
 }
