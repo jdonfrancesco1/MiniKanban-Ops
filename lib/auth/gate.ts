@@ -9,6 +9,14 @@ export function isApiLikePath(pathname: string) {
   return pathname.startsWith("/api/") || pathname === "/mcp" || pathname.startsWith("/mcp/")
 }
 
+/**
+ * Fleet-admin provision. Not a customer ops route and not opened by the
+ * local fleet dev gate. The handler accepts only OPS_PROVISION_SECRET.
+ */
+export function isProvisionPath(pathname: string) {
+  return pathname === "/api/ops/provision" || pathname.startsWith("/api/ops/provision/")
+}
+
 /** Ops HTTP and MCP. Tenant is resolved in the handler, not from a client header. */
 export function isTenantScopedOpsPath(pathname: string) {
   return (
@@ -34,6 +42,10 @@ export function opsGateDecision(input: {
   hasPresentedSecret: boolean
   hasSessionCookie: boolean
 }): OpsGateDecision {
+  if (isProvisionPath(input.pathname)) {
+    if (!input.hasPresentedSecret) return "unauthorized"
+    return "next"
+  }
   if (isPublicPath(input.pathname)) {
     if (input.fleetAuthorized && (input.pathname === "/auth" || input.pathname === "/login")) {
       return "redirect-boards"

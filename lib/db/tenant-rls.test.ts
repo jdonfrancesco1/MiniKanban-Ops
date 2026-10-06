@@ -6,7 +6,7 @@ import { PGlite } from "@electric-sql/pglite"
 import { createTenantCredential } from "../auth/credentials.ts"
 import { decideRequestAuth } from "../auth/decide.ts"
 import { FLEET_TENANT_ID } from "./ops-defaults.ts"
-import { attachTenantRls, runInRequestScope, setVerifiedTenantResolver, TENANT_SETTING_SQL } from "./tenant-rls.ts"
+import { attachTenantRls, runAsVerifiedTenant, runInRequestScope, setVerifiedTenantResolver, TENANT_SETTING_SQL } from "./tenant-rls.ts"
 
 function read(path: string) {
   return readFileSync(new URL(path, import.meta.url), "utf8")
@@ -250,6 +250,17 @@ describe("verified tenant is installed inside each transaction", { concurrency: 
     await devGate.client.query("select 1")
     assert.deepEqual(settings(devGate.log), [[FLEET_TENANT_ID]])
   })
+
+  it("sets a server-minted customer tenant without replacing the fleet resolver", async () => {
+    setVerifiedTenantResolver(() => FLEET_TENANT_ID)
+    const { client, log } = openClient()
+    await runAsVerifiedTenant("c0123456789abcde", () => client.query("insert into boards (tenant_id) values ('c0123456789abcde')"))
+    assert.deepEqual(settings(log), [["c0123456789abcde"]])
+    await client.query("select 1 -- ?tenant=fleet", ["fleet"])
+    assert.deepEqual(settings(log), [["c0123456789abcde"], [FLEET_TENANT_ID]])
+    await assert.rejects(() => runAsVerifiedTenant(FLEET_TENANT_ID, async () => undefined), /Refusing to set app\.tenant_id/)
+    await assert.rejects(() => runAsVerifiedTenant("alpha'; drop table boards; --", async () => undefined), /Refusing to set app\.tenant_id/)
+  })
 })
 
 describe("database client coverage", () => {
@@ -312,7 +323,12 @@ describe("database client coverage", () => {
     const dbImporters = production.filter((file) => /from ["']@\/lib\/db["']/.test(source(file)))
     assert.deepEqual(
       dbImporters.map((file) => file.slice(repoRoot.pathname.length)).sort(),
-      ["lib/actions/boards.ts", "lib/auth/credential-store.ts", "lib/db/fleet-tenant.ts"],
+      ["lib/actions/boards.ts", "lib/auth/credential-store.ts", "lib/db/fleet-tenant.ts", "lib/provision/persist.ts"],
+    )
+    const overrideFiles = production.filter((file) => source(file).includes("runAsVerifiedTenant"))
+    assert.deepEqual(
+      overrideFiles.map((file) => file.slice(repoRoot.pathname.length)).sort(),
+      ["lib/db/tenant-rls.ts", "lib/provision/persist.ts"],
     )
     const fleetImporters = production.filter((file) => source(file).includes("ensureFleetTenantColumns"))
     assert.deepEqual(

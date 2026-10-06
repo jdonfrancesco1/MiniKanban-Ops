@@ -125,6 +125,8 @@ export const tasks = pgTable(
  * Per-tenant credential verifier (Slice B). The plaintext secret is never stored.
  * `salt` and `verifier` are hex HMAC material. Tenant `fleet` is rejected:
  * that tenant uses OPS_BOARD_SECRET only. No RLS policy is declared here.
+ * `external_buyer_id` (Slice E) is the idempotency key for provision. It is
+ * not a secret and it is not a second credential store.
  */
 export const tenantCredentials = pgTable(
   "tenant_credentials",
@@ -132,10 +134,12 @@ export const tenantCredentials = pgTable(
     tenantId: text("tenant_id").primaryKey(),
     salt: text("salt").notNull(),
     verifier: text("verifier").notNull(),
+    externalBuyerId: text("external_buyer_id"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
     uniqueIndex("tenant_credentials_verifier_idx").on(table.verifier),
+    uniqueIndex("tenant_credentials_external_buyer_id_idx").on(table.externalBuyerId),
     check(
       "tenant_credentials_tenant_id_nonempty_chk",
       sql`${table.tenantId} = btrim(${table.tenantId}) AND length(${table.tenantId}) > 0`,
@@ -143,6 +147,10 @@ export const tenantCredentials = pgTable(
     check("tenant_credentials_not_fleet_chk", sql`${table.tenantId} <> 'fleet'`),
     check("tenant_credentials_salt_nonempty_chk", sql`length(${table.salt}) > 0`),
     check("tenant_credentials_verifier_nonempty_chk", sql`length(${table.verifier}) > 0`),
+    check(
+      "tenant_credentials_external_buyer_id_chk",
+      sql`${table.externalBuyerId} IS NULL OR (${table.externalBuyerId} = btrim(${table.externalBuyerId}) AND length(${table.externalBuyerId}) > 0 AND ${table.externalBuyerId} <> 'fleet')`,
+    ),
   ],
 )
 

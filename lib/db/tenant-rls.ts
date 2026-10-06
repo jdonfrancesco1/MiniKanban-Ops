@@ -19,6 +19,12 @@
  * When the verified actor is fleet (OPS_BOARD_SECRET, or the local dev gate),
  * the id is the fleet tenant id, so the fleet board stays visible.
  *
+ * Customer provision writes run inside runAsVerifiedTenant. That scope sets
+ * app.tenant_id to the server-minted customer id for those statements only.
+ * It does not read a query param, JSON tenant_id, or client header, and it
+ * rejects the fleet id. The verified resolver is unchanged for every other
+ * request.
+ *
  * Slice C filters in lib/ops/access.ts and lib/actions/boards.ts stay.
  * They do not replace the forced policies.
  *
@@ -28,8 +34,23 @@
  */
 
 import { AsyncLocalStorage } from "node:async_hooks"
+import { FLEET_TENANT_ID } from "./ops-defaults.ts"
 
 const TENANT_ID_RE = /^[a-z][a-z0-9_-]{0,63}$/
+
+/**
+ * Server-minted customer tenant for a write that is not the caller's session.
+ * Provision sets this after the provision secret check. It is not a request
+ * field. Fleet stays on the verified resolver; this override rejects `fleet`.
+ */
+const scopedTenant = new AsyncLocalStorage<string>()
+
+export async function runAsVerifiedTenant<T>(tenantId: string, fn: () => Promise<T>): Promise<T> {
+  if (tenantId === FLEET_TENANT_ID || typeof tenantId !== "string" || !TENANT_ID_RE.test(tenantId)) {
+    throw new Error("Refusing to set app.tenant_id from an unverified tenant key")
+  }
+  return scopedTenant.run(tenantId, () => runInRequestScope(fn))
+}
 
 /** Exact statement installed on each transaction. is_local = true. */
 export const TENANT_SETTING_SQL = "SELECT set_config('app.tenant_id', $1, true)"
@@ -127,7 +148,7 @@ export function attachTenantRls(client: QueryClient) {
   async function arm(active: Slot) {
     active.arming = true
     try {
-      const value = await resolver()
+      const value = scopedTenant.getStore() ?? (await resolver())
       if (value == null || value === "") return
       if (typeof value !== "string" || !TENANT_ID_RE.test(value)) {
         throw new Error("Refusing to set app.tenant_id from an unverified tenant key")
