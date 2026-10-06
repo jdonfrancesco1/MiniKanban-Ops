@@ -91,6 +91,7 @@ npm run db:migrate
 # drizzle/0004_tenant_id.sql
 # drizzle/0005_tenant_credentials.sql
 # drizzle/0006_force_rls.sql
+# drizzle/0007_tenant_provision.sql
 ```
 
 The first authenticated load of `/boards` or `/boards/ops` creates the default **Ops** board with the four columns above. No seed script required.
@@ -103,7 +104,7 @@ The first authenticated load of `/boards` or `/boards/ops` creates the default *
 
 With `app.tenant_id` unset, `current_setting('app.tenant_id', true)` is NULL and the predicate matches no rows, including for the table owner (fail closed). The shared database client (`lib/db/index.ts` → `lib/db/tenant-rls.ts`) starts each transaction with `SELECT set_config('app.tenant_id', <verified tenant id>, true)`. The id comes from the verified session cookie or bearer (`lib/auth/session.ts`). It is not taken from `?tenant=`, a JSON `tenant_id`, or an `X-Tenant-*` header. `OPS_BOARD_SECRET` (and the local dev gate, which is the fleet actor) sets the fleet tenant id `fleet`, so the fleet board stays visible. The third argument is true so the setting ends with the transaction and cannot leak across requests on the shared client.
 
-The policies stay out of the Drizzle schema on purpose: putting them there makes `db:push` run `ENABLE ROW LEVEL SECURITY`. `npm run db:push` does not force row security. Run `0004`, then `0005`, then `0006` by hand when you intend to. `0006` is not applied to production Neon by the slice that adds the file. The ops-board self-heal adds and backfills `tenant_id` when the column is missing. It does not enable row security. Null-tenant backfill is `0004`, before FORCE. Fleet day-to-day still uses `OPS_BOARD_SECRET` for tenant `fleet`. That secret is not a customer key. Sell HOLD stays. This is not a sell unlock and does not deploy the Worker.
+The policies stay out of the Drizzle schema on purpose: putting them there makes `db:push` run `ENABLE ROW LEVEL SECURITY`. `npm run db:push` does not force row security. Run `0004`, then `0005`, then `0006`, then `0007` by hand when you intend to. `0006` is not applied to production Neon by the slice that adds the file. `drizzle/0007_tenant_provision.sql` adds `external_buyer_id` on `tenant_credentials` and is not applied to production Neon by the slice that adds it. The ops-board self-heal adds and backfills `tenant_id` when the column is missing. It does not enable row security. Null-tenant backfill is `0004`, before FORCE. Fleet day-to-day still uses `OPS_BOARD_SECRET` for tenant `fleet`. That secret is not a customer key. Sell HOLD stays. This is not a sell unlock and does not deploy the Worker.
 
 `drizzle/0005_tenant_credentials.sql` adds `tenant_credentials` (per-tenant salt and HMAC verifier, no plaintext secret, no row for `fleet`). It does not enable or force RLS. The Drizzle schema includes that table, so `db:push` creates it and does not turn RLS on. Customer session cookies need `OPS_TENANT_SESSION_SECRET`, and that value must not be the fleet secret. Unset means customer cookie sessions fail closed.
 
@@ -126,9 +127,32 @@ Fleet board: enter `OPS_BOARD_SECRET` on `/` or `/auth`. That secret is tenant `
 
 Customer tenants each have their own high-entropy secret. `tenant_credentials` stores a per-tenant salt and HMAC verifier, not the secret. A customer session cookie encodes that tenant id and is checked against the credential row. `{ uid: "ops" }` is returned only for the fleet tenant. Tenant id is taken from the verified secret or session. It is not taken from `?tenant=`, a JSON `tenant_id`, or a client header.
 
-Sell HOLD stays. This does not make the hosted board multi-customer ready and does not unlock a sale. `/api/ops/*` and MCP read and write only the verified tenant's rows. A board id or task id from another tenant is rejected and does not return that row. Those app checks stay. `drizzle/0006_force_rls.sql` is a separate control: after it is applied, Postgres enforces the same tenant boundary on the table owner. This change does not apply that migration to production Neon and does not deploy the Worker. Applying `drizzle/0005_tenant_credentials.sql` is required before a customer verifier can be stored. This does not mint marketplace credentials and does not rotate the live fleet secret.
+Sell HOLD stays. This does not make the hosted board multi-customer ready and does not unlock a sale. `/api/ops/*` and MCP read and write only the verified tenant's rows. A board id or task id from another tenant is rejected and does not return that row. Those app checks stay. `drizzle/0006_force_rls.sql` is a separate control: after it is applied, Postgres enforces the same tenant boundary on the table owner. This change does not apply that migration to production Neon and does not deploy the Worker. Applying `drizzle/0005_tenant_credentials.sql` is required before a customer verifier can be stored. Applying `drizzle/0007_tenant_provision.sql` is required before a buyer id can be stored. Neither file is applied to production by this slice. The provision route below is the only mint path. It does not rotate the live fleet secret and it does not submit the marketplace listing.
 
-If `OPS_BOARD_SECRET` is unset in local development, the fleet gate is open. In production, a missing credential fails closed (401).
+If `OPS_BOARD_SECRET` is unset in local development, the fleet gate is open. In production, a missing credential fails closed (401). Provision does not follow that dev gate. See [Customer provision](#customer-provision-slice-e).
+
+## Customer provision (Slice E)
+
+Fleet-admin only. `POST /api/ops/provision` creates one non-`fleet` tenant, that tenant's default Ops board (Need you / I'm on / Waiting / Done), and one row in `tenant_credentials` (per-tenant salt and HMAC verifier). The plaintext secret is returned in the creating response body once. It is not written to git, to disk in this repo, to a client bundle, or to a second secret store.
+
+The route is not anonymous. The local fleet dev gate does not open it. A fleet session cookie does not open it. `OPS_BOARD_SECRET` does not open it, and a customer bearer does not open it. Send `Authorization: Bearer $OPS_PROVISION_SECRET`. `OPS_PROVISION_SECRET` must be set and must not equal `OPS_BOARD_SECRET`. If it is unset, or if it is the same value as the fleet secret, the route fails closed (401), including in local development. The header `X-Ops-Board-Secret` is not accepted here.
+
+`OPS_PUBLIC_BASE_URL` is the origin written into the customer connector (`{origin}/mcp`). If it is unset, the request origin is used. The fleet host `minikanban-ops.productvision.workers.dev` is refused, so the handoff cannot point at the fleet board. Do not give a customer the fleet `OPS_BOARD_SECRET` or the fleet workers.dev connector from the free plugin listing. The customer env name in the handoff is `MINIKANBAN_TENANT_SECRET`.
+
+Idempotency: body field `externalBuyerId` is a stable buyer key. It is not a tenant id and not a secret. The same buyer id returns the same tenant (`created: false`) and does not mint a second tenant or a second secret. The secret is omitted on that replay. A different buyer id gets a different tenant. If the board write fails after the verifier is stored, a replay repairs the board and still does not return a secret. A lost handoff is not recovered by calling provision again. This slice does not rotate credentials. Client `tenantId` and `tenant_id` fields are ignored. The server generates the tenant id, and that id is never `fleet`.
+
+Payment checkout is not wired. A fleet admin calls this route. A later server-side checkout handler can call the same function. Sell HOLD stays. This does not deploy the Worker, does not apply `drizzle/0006_force_rls.sql` or `drizzle/0007_tenant_provision.sql` to production Neon, does not rotate live `OPS_*` secrets, and does not submit the marketplace listing. The free plugin listing stays the fleet connector. It is not the customer handoff.
+
+```bash
+curl -sS -X POST "$OPS_PUBLIC_BASE_URL/api/ops/provision" \
+  -H "Authorization: Bearer $OPS_PROVISION_SECRET" \
+  -H "Content-Type: application/json" \
+  -d '{"externalBuyerId":"buyer_example"}'
+```
+
+Copy the returned secret into the customer connector env once. Do not commit the response, paste it into chat, or store it as `OPS_BOARD_SECRET`.
+
+The customer bearer then opens only that tenant through the existing `/api/ops/*` and `/mcp` handlers. Those handlers still take the tenant from the verified secret. They do not take it from the buyer id. Board writes during provision set `app.tenant_id` to the new tenant inside the transaction (`set_config`, third argument true), which is the same path `drizzle/0006_force_rls.sql` enforces after it is applied.
 
 ## Chat / agent API (Orca)
 
@@ -195,7 +219,7 @@ Streamable HTTP on the live Cloudflare worker. Same board and same `lib/api/ops.
 | Docs | [`/connect`](https://minikanban-ops.productvision.workers.dev/connect) |
 | Transport | Streamable HTTP (`POST` JSON-RPC) |
 | Auth | `Authorization: Bearer <OPS_BOARD_SECRET>` (or `X-Ops-Board-Secret`) |
-| Secret env | `OPS_BOARD_SECRET` — store on the MCP connector / Replit / Cursor server env |
+| Secret env | `OPS_BOARD_SECRET` — fleet board only. Store on the fleet MCP connector / Replit / Cursor server env. Customer handoff uses `MINIKANBAN_TENANT_SECRET` from provision, not this value. |
 
 ### Tools
 

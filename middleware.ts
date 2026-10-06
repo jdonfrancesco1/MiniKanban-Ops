@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server"
-import { opsGateDecision } from "@/lib/auth/gate"
+import { isProvisionPath, opsGateDecision } from "@/lib/auth/gate"
 import { getPresentedOpsSecret, isOpsRequestAuthorized } from "@/lib/auth/request"
 import { isFleetDevGateOpen, OPS_SESSION_COOKIE } from "@/lib/auth/token"
 
@@ -8,7 +8,7 @@ export async function middleware(request: NextRequest) {
   const presented = getPresentedOpsSecret(request.headers)
   const cookie = request.cookies.get(OPS_SESSION_COOKIE)?.value
 
-  if (isFleetDevGateOpen() && !presented && !cookie?.startsWith("v1.")) {
+  if (isFleetDevGateOpen() && !presented && !cookie?.startsWith("v1.") && !isProvisionPath(pathname)) {
     return NextResponse.next()
   }
 

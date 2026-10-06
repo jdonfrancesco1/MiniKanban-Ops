@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
 import { describe, it } from "node:test"
 import { createTenantCredential } from "../auth/credentials.ts"
-import { opsGateDecision } from "../auth/gate.ts"
+import { isProvisionPath, opsGateDecision } from "../auth/gate.ts"
 import { handleMcpHttp } from "../mcp/http.ts"
 import {
   dispatchOpsApi,
@@ -402,6 +402,25 @@ describe("ops gate", () => {
         hasSessionCookie: false,
       }),
       "unauthorized",
+    )
+    assert.equal(isProvisionPath("/api/ops/provision"), true)
+    assert.equal(
+      opsGateDecision({
+        pathname: "/api/ops/provision",
+        fleetAuthorized: true,
+        hasPresentedSecret: false,
+        hasSessionCookie: true,
+      }),
+      "unauthorized",
+    )
+    assert.equal(
+      opsGateDecision({
+        pathname: "/api/ops/provision",
+        fleetAuthorized: false,
+        hasPresentedSecret: true,
+        hasSessionCookie: false,
+      }),
+      "next",
     )
   })
 })
