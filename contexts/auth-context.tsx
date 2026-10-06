@@ -6,6 +6,7 @@ export type OpsUser = {
   uid: string
   phoneNumber: string | null
   displayName?: string | null
+  tenantId?: string
 }
 
 type AuthContextType = {

@@ -31,7 +31,8 @@ Copy `.env.example` to `.env.local`:
 | --- | --- | --- |
 | `DATABASE_URL` | Yes, unless `OPS_BOARD_DATABASE_URL` is set | Postgres connection string (Replit Helium or Neon). Fallback for the ops board pool. |
 | `OPS_BOARD_DATABASE_URL` | Autoscale when Publish `DATABASE_URL` is Neon | **Preferred** connection string for the ops board pool / `getDb` (all ops API + board queries). Set the Autoscale secret to the workspace Helium `DATABASE_URL` if Publish `DATABASE_URL` is Neon. Replit hides managed `DATABASE_URL`, so it cannot be copied in the Publish Secrets UI. |
-| `OPS_BOARD_SECRET` | Recommended in prod | Shared password. Sets an httpOnly session cookie. MCP + `/api/ops/*` use `Authorization: Bearer` with this same secret. If omitted, the board is open. |
+| `OPS_BOARD_SECRET` | Fleet board | Secret for tenant `fleet` only. Not a key into customer tenants. Sets the fleet httpOnly session cookie. Fleet MCP + `/api/ops/*` use `Authorization: Bearer` with this secret. If omitted in local/dev, the fleet gate is open. In production, a missing fleet or customer credential fails closed (401). |
+| `OPS_TENANT_SESSION_SECRET` | Customer cookies | Signs multi-customer session cookies. Must not be `OPS_BOARD_SECRET`. If omitted, customer cookie sessions fail closed. Customer bearer secrets still resolve from `tenant_credentials` when that table has rows. |
 
 Do not add `NEXT_PUBLIC_FIREBASE_*`. There is no Firebase.
 
@@ -88,6 +89,7 @@ npm run db:migrate
 # drizzle/0002_task_completed_at.sql
 # drizzle/0003_task_close_sub_status.sql
 # drizzle/0004_tenant_id.sql
+# drizzle/0005_tenant_credentials.sql
 ```
 
 The first authenticated load of `/boards` or `/boards/ops` creates the default **Ops** board with the four columns above. No seed script required.
@@ -96,7 +98,9 @@ The first authenticated load of `/boards` or `/boards/ops` creates the default *
 
 `drizzle/0004_tenant_id.sql` adds `tenant_id text` on `boards`, `columns`, and `tasks`. Existing rows are backfilled to the named fleet tenant `fleet` (blank tenants only; a board that already has a tenant id is left alone). Child rows copy `tenant_id` from their parent board. `board_id` foreign keys stay; composite foreign keys also require the child tenant to match its parent. Slug uniqueness is per tenant. The current single-secret ops path writes `fleet` on the server. It does not take a tenant from the query string, body, or a client header. There is no column default of `fleet`, so a later insert cannot silently land in the fleet tenant.
 
-That migration also drafts RLS policies (`tenant_id = current_setting('app.tenant_id', true)`). They are not enabled and not forced in this slice. With `app.tenant_id` unset, that predicate matches no rows. `FORCE ROW LEVEL SECURITY` would apply it to the table owner, which is the current fleet connection, and hide the fleet board. Slice C sets `app.tenant_id` from the verified credential before enabling and forcing RLS. The policies are SQL-only on purpose: putting them in the Drizzle schema makes `db:push` run `ENABLE ROW LEVEL SECURITY`. `npm run db:push` applies the columns, checks, and foreign keys. Run `0004` after that so the drafted policies exist (the file is safe to re-run). The ops-board self-heal adds and backfills `tenant_id` when the column is missing. It does not enable RLS. This is still one fleet board behind the existing secret, not a multi-customer sell path.
+That migration also drafts RLS policies (`tenant_id = current_setting('app.tenant_id', true)`). They are not enabled and not forced in this slice. With `app.tenant_id` unset, that predicate matches no rows. `FORCE ROW LEVEL SECURITY` would apply it to the table owner, which is the current fleet connection, and hide the fleet board. Slice C sets `app.tenant_id` from the verified credential before enabling and forcing RLS. The policies are SQL-only on purpose: putting them in the Drizzle schema makes `db:push` run `ENABLE ROW LEVEL SECURITY`. `npm run db:push` applies the columns, checks, and foreign keys. Run `0004` after that so the drafted policies exist (the file is safe to re-run). The ops-board self-heal adds and backfills `tenant_id` when the column is missing. It does not enable RLS. Fleet day-to-day still uses `OPS_BOARD_SECRET` for tenant `fleet`. That secret is not a customer key. Sell HOLD stays.
+
+`drizzle/0005_tenant_credentials.sql` adds `tenant_credentials` (per-tenant salt and HMAC verifier, no plaintext secret, no row for `fleet`). It does not enable or force RLS. The Drizzle schema includes that table, so `db:push` creates it and does not turn RLS on. Customer session cookies need `OPS_TENANT_SESSION_SECRET`, and that value must not be the fleet secret. Unset means customer cookie sessions fail closed.
 
 `drizzle.config.ts` falls back to `postgresql://user:password@localhost:5432/minikanban_ops` only so `drizzle-kit` can start without a live Neon account. That placeholder is not a real database.
 
@@ -111,11 +115,15 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000). Home deep-links to the ops board (`/boards/ops`) after the secret gate.
 
-## Auth (v1)
+## Auth
 
-Single-user gate. Enter `OPS_BOARD_SECRET` on `/` or `/auth`. Session cookie: `ops_board_session`. No Clerk, no Firebase, no phone auth. Email magic can come later.
+Fleet board: enter `OPS_BOARD_SECRET` on `/` or `/auth`. That secret is tenant `fleet` only. Session cookie: `ops_board_session` (fleet cookies are still the fleet HMAC). No Clerk, no Firebase, no phone auth.
 
-There is one password. Browser UI and Orca both use `OPS_BOARD_SECRET`. Do not invent a second secret.
+Customer tenants each have their own high-entropy secret. `tenant_credentials` stores a per-tenant salt and HMAC verifier, not the secret. A customer session cookie encodes that tenant id and is checked against the credential row. `{ uid: "ops" }` is returned only for the fleet tenant. Tenant id is taken from the verified secret or session. It is not taken from `?tenant=`, a JSON `tenant_id`, or a client header.
+
+Sell HOLD stays. This does not make the hosted board multi-customer ready. Row checks on every API/MCP path and `FORCE` RLS are later slices. Applying `drizzle/0005_tenant_credentials.sql` is required before a customer verifier can be stored. This slice does not mint marketplace credentials and does not rotate the live fleet secret.
+
+If `OPS_BOARD_SECRET` is unset in local development, the fleet gate is open. In production, a missing credential fails closed (401).
 
 ## Chat / agent API (Orca)
 
@@ -128,7 +136,7 @@ Private first slice for James ↔ Orca dogfood. Same Neon board the Repl UI uses
    - `Authorization: Bearer <OPS_BOARD_SECRET>`
    - or `X-Ops-Board-Secret: <OPS_BOARD_SECRET>`
 
-Missing or wrong credentials return `401` JSON: `{ "error": "Unauthorized" }`. If `OPS_BOARD_SECRET` is unset, the gate is open (local/dev).
+Missing or wrong fleet credentials return `401` JSON: `{ "error": "Unauthorized" }`. A customer bearer resolves to that tenant and does not open the fleet board (`403` on `/mcp` until later slices scope tools). If `OPS_BOARD_SECRET` is unset, the fleet gate is open only in local/dev. Production fails closed.
 
 ### `GET /api/ops/board`
 

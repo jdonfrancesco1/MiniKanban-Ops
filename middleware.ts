@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server"
-import { isOpsRequestAuthorized } from "@/lib/auth/request"
+import { getPresentedOpsSecret, isOpsRequestAuthorized } from "@/lib/auth/request"
+import { isFleetDevGateOpen, OPS_SESSION_COOKIE } from "@/lib/auth/token"
 
 const PUBLIC_PREFIXES = ["/_next", "/favicon", "/icon", "/placeholder", "/api/auth", "/preview"]
 
@@ -15,8 +16,12 @@ function isApiLikePath(pathname: string) {
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
-  if (!process.env.OPS_BOARD_SECRET) {
-    return NextResponse.next()
+  if (isFleetDevGateOpen()) {
+    const presented = getPresentedOpsSecret(request.headers)
+    const cookie = request.cookies.get(OPS_SESSION_COOKIE)?.value
+    if (!presented && !cookie?.startsWith("v1.")) {
+      return NextResponse.next()
+    }
   }
 
   const authenticated = await isOpsRequestAuthorized(request)

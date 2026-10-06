@@ -46,11 +46,19 @@ export function OpsLoginForm({ heading = "Open the ops board" }: { heading?: str
     return <p className="text-white/70">Checking session…</p>
   }
 
-  if (user) {
+  if (user?.uid === "ops") {
     return (
       <Button className="w-full bg-pink-500 hover:bg-pink-600 text-white" onClick={() => router.push("/boards/ops")}>
         Open ops board
       </Button>
+    )
+  }
+
+  if (user) {
+    return (
+      <p className="text-white/80">
+        Signed in for tenant {user.tenantId ?? user.displayName}. The fleet board stays on the fleet secret.
+      </p>
     )
   }
 

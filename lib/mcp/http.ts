@@ -1,4 +1,6 @@
-import { authorizeMcpRequest } from "./auth.ts"
+import type { TenantCredentialRecord } from "../auth/credentials.ts"
+import { verifyOpsSecret } from "../auth/token.ts"
+import { presentedMcpSecret, resolveMcpAccess } from "./auth.ts"
 import {
   MCP_DEFAULT_PROTOCOL,
   MCP_SERVER_NAME,
@@ -13,6 +15,8 @@ import { MCP_TOOL_NAMES, type OpsToolPort } from "./tools.ts"
 export type McpHttpOptions = {
   expectedSecret?: string | undefined
   port: OpsToolPort
+  customerCredentials?: readonly TenantCredentialRecord[]
+  loadCustomerCredentials?: () => Promise<readonly TenantCredentialRecord[]>
 }
 
 const CORS_HEADERS = {
@@ -92,9 +96,27 @@ export function mcpServerInfo() {
   }
 }
 
-export async function handleMcpHttp(request: Request, options: McpHttpOptions = {}): Promise<Response> {
-  const auth = authorizeMcpRequest(request.headers, options.expectedSecret)
-  if (!auth.ok) return mcpUnauthorizedResponse()
+async function customerRecords(options: McpHttpOptions) {
+  if (options.customerCredentials) return options.customerCredentials
+  if (!options.loadCustomerCredentials) return []
+  try {
+    return await options.loadCustomerCredentials()
+  } catch {
+    return []
+  }
+}
+
+export async function handleMcpHttp(request: Request, options: McpHttpOptions): Promise<Response> {
+  const fleetSecret = options.expectedSecret ?? process.env.OPS_BOARD_SECRET
+  const presented = presentedMcpSecret(request.headers)
+  const production = process.env.NODE_ENV === "production"
+  const fleetHit = Boolean(presented && fleetSecret && verifyOpsSecret(presented, fleetSecret))
+  const records = presented && !fleetHit ? await customerRecords(options) : []
+  const access = await resolveMcpAccess({ presented, fleetSecret, records, production })
+  if (!access.allowFleetTools) {
+    if (access.status === 403) return jsonResponse(403, { error: "Forbidden" })
+    return mcpUnauthorizedResponse()
+  }
 
   if (request.method === "OPTIONS") return mcpCorsPreflight()
 

@@ -120,6 +120,32 @@ export const tasks = pgTable(
   ],
 )
 
+/**
+ * Per-tenant credential verifier (Slice B). The plaintext secret is never stored.
+ * `salt` and `verifier` are hex HMAC material. Tenant `fleet` is rejected:
+ * that tenant uses OPS_BOARD_SECRET only. No RLS policy is declared here.
+ */
+export const tenantCredentials = pgTable(
+  "tenant_credentials",
+  {
+    tenantId: text("tenant_id").primaryKey(),
+    salt: text("salt").notNull(),
+    verifier: text("verifier").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex("tenant_credentials_verifier_idx").on(table.verifier),
+    check(
+      "tenant_credentials_tenant_id_nonempty_chk",
+      sql`${table.tenantId} = btrim(${table.tenantId}) AND length(${table.tenantId}) > 0`,
+    ),
+    check("tenant_credentials_not_fleet_chk", sql`${table.tenantId} <> 'fleet'`),
+    check("tenant_credentials_salt_nonempty_chk", sql`length(${table.salt}) > 0`),
+    check("tenant_credentials_verifier_nonempty_chk", sql`length(${table.verifier}) > 0`),
+  ],
+)
+
 export type BoardRow = typeof boards.$inferSelect
 export type ColumnRow = typeof columns.$inferSelect
 export type TaskRow = typeof tasks.$inferSelect
+export type TenantCredentialRow = typeof tenantCredentials.$inferSelect
