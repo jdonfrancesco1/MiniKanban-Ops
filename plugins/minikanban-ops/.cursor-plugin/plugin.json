@@ -1,11 +1,11 @@
 {
   "name": "minikanban-ops",
   "displayName": "MiniKanban Ops",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "minClientVersions": {
     "cursor": "3.13.0"
   },
-  "description": "List, add, move, complete, and archive cards on the MiniKanban Ops board through the live Streamable HTTP MCP.",
+  "description": "Ops board for Cursor and Grok Bot. The inline Task List summarizes MKB cards from the live Streamable HTTP MCP. MiniKanban is the source of truth.",
   "author": {
     "name": "MiniKanban Ops"
   },

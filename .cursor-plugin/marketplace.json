@@ -4,13 +4,13 @@
     "name": "MiniKanban Ops"
   },
   "metadata": {
-    "description": "MiniKanban Ops board plugin for Cursor and Grok Bot."
+    "description": "MiniKanban Ops board for Cursor and Grok Bot. The inline Task List summarizes MKB cards from the live board."
   },
   "plugins": [
     {
       "name": "minikanban-ops",
       "source": "./plugins/minikanban-ops",
-      "description": "CRUD the MiniKanban Ops board through the live Streamable HTTP MCP."
+      "description": "Connect the live MiniKanban Ops MCP. Grok Bot's inline Task List summarizes MKB board columns."
     }
   ]
 }
