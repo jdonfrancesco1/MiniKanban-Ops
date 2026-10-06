@@ -1,0 +1,31 @@
+{
+  "name": "minikanban-ops",
+  "displayName": "MiniKanban Ops",
+  "version": "1.0.0",
+  "minClientVersions": {
+    "cursor": "3.13.0"
+  },
+  "description": "List, add, move, complete, and archive cards on the MiniKanban Ops board through the live Streamable HTTP MCP.",
+  "author": {
+    "name": "MiniKanban Ops"
+  },
+  "homepage": "https://minikanban-ops.productvision.workers.dev/connect",
+  "repository": "https://github.com/jdonfrancesco1/MiniKanban-Ops",
+  "license": "MIT",
+  "logo": "assets/logo.svg",
+  "keywords": ["minikanban", "kanban", "ops", "mcp", "tasks"],
+  "category": "integrations",
+  "tags": ["kanban", "mcp", "ops"],
+  "variables": {
+    "type": "object",
+    "properties": {
+      "OPS_BOARD_SECRET": {
+        "type": "string",
+        "title": "Ops board secret",
+        "description": "Bearer token for the MiniKanban Ops MCP. Same value as the board login. Set it in Plugins → Configure. Do not commit it."
+      }
+    },
+    "required": ["OPS_BOARD_SECRET"]
+  },
+  "mcpServers": "./mcp.json"
+}

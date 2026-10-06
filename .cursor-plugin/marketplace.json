@@ -1,0 +1,16 @@
+{
+  "name": "minikanban-ops",
+  "owner": {
+    "name": "MiniKanban Ops"
+  },
+  "metadata": {
+    "description": "MiniKanban Ops board plugin for Cursor and Grok Bot."
+  },
+  "plugins": [
+    {
+      "name": "minikanban-ops",
+      "source": "./plugins/minikanban-ops",
+      "description": "CRUD the MiniKanban Ops board through the live Streamable HTTP MCP."
+    }
+  ]
+}
