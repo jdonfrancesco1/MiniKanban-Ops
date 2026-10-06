@@ -6,7 +6,10 @@ import { FLEET_TENANT_ID } from "@/lib/db/ops-defaults"
  * Add tenant_id and backfill the fleet tenant when the column is not there yet.
  * Matches the column/backfill/NOT NULL portion of drizzle/0004_tenant_id.sql so the
  * single-secret ops path keeps loading if that migration has not been applied.
- * Does not create RLS policies and does not enable or force RLS (Slice C).
+ * Does not enable or force row security. That is drizzle/0006_force_rls.sql.
+ * This statement runs on the shared client, so the verified tenant is applied
+ * before it executes. Backfill of null tenant ids belongs to 0004, which runs
+ * before FORCE. After FORCE, a null tenant_id is not visible to the table owner.
  * Full foreign keys, slug uniqueness, and drafted policies live in 0004.
  */
 export async function ensureFleetTenantColumns() {

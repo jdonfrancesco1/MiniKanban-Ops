@@ -3,6 +3,7 @@ import { loadTenantCredentialRecords } from "@/lib/auth/credential-store"
 import { decideRequestAuth } from "@/lib/auth/decide"
 import { getPresentedOpsSecret } from "@/lib/auth/request"
 import { customerSessionSigningKey } from "@/lib/auth/tenant-session"
+import { setVerifiedTenantResolver } from "@/lib/db/tenant-rls"
 import { OpsAccessError } from "@/lib/ops/access"
 import {
   createSessionToken,
@@ -54,12 +55,21 @@ export async function requireOpsSession() {
   }
 }
 
-/** Fleet or customer. Tenant comes from the verified cookie or bearer only. */
+/**
+ * Fleet or customer. Tenant comes from the verified cookie or bearer only.
+ * The database client reads this same identity for each transaction
+ * (lib/db/tenant-rls.ts). Slice C checks that call this function stay.
+ */
 export async function requireActorTenant() {
   const identity = await resolveAuthIdentity()
   if (!identity?.tenantId) throw new OpsAccessError(401)
   return identity.tenantId
 }
+
+setVerifiedTenantResolver(async () => {
+  const identity = await resolveAuthIdentity()
+  return identity?.tenantId ?? null
+})
 
 async function writeSessionCookie(value: string) {
   const store = await cookies()

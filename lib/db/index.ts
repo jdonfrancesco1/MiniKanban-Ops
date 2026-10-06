@@ -5,6 +5,7 @@ import { Client, type ClientConfig } from "pg"
 import { getOpsBoardDatabaseUrl } from "./fingerprint"
 import { scopeToRequest } from "./request-scope"
 import * as schema from "./schema"
+import { attachTenantRls } from "./tenant-rls"
 
 export type OpsDb = NodePgDatabase<typeof schema>
 
@@ -31,6 +32,10 @@ function clientConfig(connectionString: string): ClientConfig {
 
 function openClient(connectionString: string) {
   const client = new Client(clientConfig(connectionString))
+  // Every boards/columns/tasks statement on this client runs inside a
+  // transaction that sets app.tenant_id from the verified tenant.
+  // Credential reads use the same client. See lib/db/tenant-rls.ts.
+  attachTenantRls(client)
   client.on("error", () => {
     // Queries reject with the driver error. Swallow the socket event so it
     // cannot crash the isolate, and do not log the connection string.
