@@ -1,43 +1,29 @@
 import { NextResponse, type NextRequest } from "next/server"
+import { opsGateDecision } from "@/lib/auth/gate"
 import { getPresentedOpsSecret, isOpsRequestAuthorized } from "@/lib/auth/request"
 import { isFleetDevGateOpen, OPS_SESSION_COOKIE } from "@/lib/auth/token"
 
-const PUBLIC_PREFIXES = ["/_next", "/favicon", "/icon", "/placeholder", "/api/auth", "/preview"]
-
-function isPublicPath(pathname: string) {
-  if (pathname === "/" || pathname === "/auth" || pathname === "/login" || pathname === "/connect") return true
-  return PUBLIC_PREFIXES.some((prefix) => pathname.startsWith(prefix))
-}
-
-function isApiLikePath(pathname: string) {
-  return pathname.startsWith("/api/") || pathname === "/mcp" || pathname.startsWith("/mcp/")
-}
-
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
+  const presented = getPresentedOpsSecret(request.headers)
+  const cookie = request.cookies.get(OPS_SESSION_COOKIE)?.value
 
-  if (isFleetDevGateOpen()) {
-    const presented = getPresentedOpsSecret(request.headers)
-    const cookie = request.cookies.get(OPS_SESSION_COOKIE)?.value
-    if (!presented && !cookie?.startsWith("v1.")) {
-      return NextResponse.next()
-    }
-  }
-
-  const authenticated = await isOpsRequestAuthorized(request)
-
-  if (isPublicPath(pathname)) {
-    if (authenticated && (pathname === "/auth" || pathname === "/login")) {
-      return NextResponse.redirect(new URL("/boards/ops", request.url))
-    }
+  if (isFleetDevGateOpen() && !presented && !cookie?.startsWith("v1.")) {
     return NextResponse.next()
   }
 
-  if (authenticated) {
-    return NextResponse.next()
-  }
+  const decision = opsGateDecision({
+    pathname,
+    fleetAuthorized: await isOpsRequestAuthorized(request),
+    hasPresentedSecret: Boolean(presented),
+    hasSessionCookie: Boolean(cookie),
+  })
 
-  if (isApiLikePath(pathname)) {
+  if (decision === "redirect-boards") {
+    return NextResponse.redirect(new URL("/boards/ops", request.url))
+  }
+  if (decision === "next") return NextResponse.next()
+  if (decision === "unauthorized") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { createOpsTask, opsApiError } from "@/lib/api/ops"
+import { assertOwnedBoard, createOpsTask, opsApiError } from "@/lib/api/ops"
 
 export const dynamic = "force-dynamic"
 
@@ -12,6 +12,7 @@ export async function POST(request: Request) {
       description?: unknown
       labels?: unknown
       closeSubStatus?: unknown
+      boardId?: unknown
     }
     if (typeof body.title !== "string" || !body.title.trim()) {
       return NextResponse.json({ error: "Title is required" }, { status: 400 })
@@ -31,6 +32,10 @@ export async function POST(request: Request) {
     if (body.closeSubStatus !== undefined && body.closeSubStatus !== null && typeof body.closeSubStatus !== "string") {
       return NextResponse.json({ error: "closeSubStatus must be a string" }, { status: 400 })
     }
+    if (body.boardId !== undefined && typeof body.boardId !== "string") {
+      return NextResponse.json({ error: "boardId must be a string" }, { status: 400 })
+    }
+    await assertOwnedBoard(typeof body.boardId === "string" ? body.boardId : undefined)
 
     const created = await createOpsTask({
       title: body.title,

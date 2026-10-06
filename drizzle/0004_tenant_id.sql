@@ -13,8 +13,9 @@
 -- A board that already has a non-blank tenant_id is left alone (safe to re-run).
 --
 -- RLS policies are created and intentional. ENABLE ROW LEVEL SECURITY and
--- FORCE ROW LEVEL SECURITY are deferred to Slice C. Do not enable them in this file.
--- Until Slice C sets app.tenant_id from the verified credential/session, enabling RLS
+-- FORCE ROW LEVEL SECURITY stay deferred (follow-on after app-level Slice C).
+-- Do not enable them in this file.
+-- Enabling RLS before app.tenant_id is set from the verified credential
 -- would fail closed (unset current_setting matches no rows). FORCE would apply that
 -- to the table owner, which is the current fleet connection, and would hide the fleet board.
 -- With RLS disabled, these policies are inert and the single-secret fleet path is unchanged.
@@ -120,7 +121,7 @@ COMMENT ON COLUMN boards.tenant_id IS 'Tenant key. The existing fleet board is t
 COMMENT ON COLUMN columns.tenant_id IS 'Same tenant as the parent board (columns_board_tenant_fk).';
 COMMENT ON COLUMN tasks.tenant_id IS 'Same tenant as the parent board and column (tasks_board_tenant_fk, tasks_column_tenant_fk).';
 
--- Drafted policies. Inert until Slice C enables and forces RLS.
+-- Drafted policies. Inert until the FORCE RLS follow-on after app-level Slice C.
 DROP POLICY IF EXISTS boards_tenant_isolation ON boards;
 CREATE POLICY boards_tenant_isolation ON boards
   FOR ALL
@@ -139,7 +140,7 @@ CREATE POLICY tasks_tenant_isolation ON tasks
   USING (tenant_id = current_setting('app.tenant_id', true))
   WITH CHECK (tenant_id = current_setting('app.tenant_id', true));
 
--- Slice C follow-up (not run here):
+-- FORCE RLS follow-on after app-level Slice C (not run here):
 --   ALTER TABLE boards ENABLE ROW LEVEL SECURITY;
 --   ALTER TABLE boards FORCE ROW LEVEL SECURITY;
 --   ALTER TABLE columns ENABLE ROW LEVEL SECURITY;

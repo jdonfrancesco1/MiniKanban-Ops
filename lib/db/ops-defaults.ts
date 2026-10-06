@@ -5,10 +5,10 @@ export const DEFAULT_BOARD_DESCRIPTION = "James ↔ Grok Bot (Orca) work progres
 /**
  * Named tenant for the existing single-secret fleet board.
  * Text, not a uuid: the locked fleet key is the name `fleet`.
- * The fleet ops path stamps this on the server. Slice B resolves any other
- * tenant from that tenant's credential or session and does not let it through
- * the fleet gate. Slice C scopes every query to the verified tenant.
- * Never take tenant from a query param, JSON body, or client header.
+ * The fleet ops path stamps this on the server. The verified session or bearer
+ * is the only tenant authority. Queries for boards, columns, and tasks are
+ * limited to that tenant. Never take tenant from a query param, JSON body,
+ * or client header. FORCE RLS is a later follow-on and is not enabled here.
  */
 export const FLEET_TENANT_ID = "fleet"
 
