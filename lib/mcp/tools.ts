@@ -3,7 +3,6 @@ import {
   OPS_MCP_BOARD_SLUG,
   OPS_MCP_COLUMNS,
   columnTitleForTask,
-  isOpsBoardSlug,
   isOpsColumnTitle,
   presentOpsBoard,
   presentOpsTask,
@@ -61,7 +60,8 @@ export const MCP_TOOL_DEFINITIONS = [
       properties: {
         slug: {
           type: "string",
-          description: "Board slug. Only ops is supported.",
+          description:
+            "Board slug inside the authenticated tenant. Defaults to ops. Another tenant's slug or id is rejected.",
           default: OPS_MCP_BOARD_SLUG,
         },
       },
@@ -285,10 +285,7 @@ export async function runMcpTool(
     const args = asRecord(rawArgs)
     switch (name as McpToolName) {
       case "list_board": {
-        const slug = optionalString(args.slug) || OPS_MCP_BOARD_SLUG
-        if (!isOpsBoardSlug(slug)) {
-          throw new Error(`Only board slug "${OPS_MCP_BOARD_SLUG}" is supported`)
-        }
+        const slug = optionalString(args.slug)?.trim() || OPS_MCP_BOARD_SLUG
         const board = presentOpsBoard(await port.listBoard(slug))
         return ok(board)
       }

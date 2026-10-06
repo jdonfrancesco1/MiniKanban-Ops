@@ -2,12 +2,14 @@ import { NextResponse } from "next/server"
 import {
   addTask,
   deleteTask,
-  ensureDefaultBoard,
+  getActorOpsBoard,
+  getBoard,
   getTaskById,
   moveTask,
   updateTask,
 } from "@/lib/actions/boards"
-import { requireOpsSession } from "@/lib/auth/session"
+import { requireActorTenant } from "@/lib/auth/session"
+import { OpsAccessError } from "@/lib/ops/access"
 import { fingerprintProcessDatabase } from "@/lib/db/fingerprint"
 import { OPS_COLUMN_TITLES } from "@/lib/db/ops-defaults"
 import { isCloseSubStatus } from "@/lib/close-sub-status"
@@ -83,9 +85,15 @@ export function unauthorizedJson() {
 }
 
 export function opsApiError(error: unknown) {
+  if (error instanceof OpsAccessError) {
+    return NextResponse.json({ error: error.message }, { status: error.status })
+  }
   const message = error instanceof Error ? error.message : "Request failed"
   if (message === "Unauthorized") {
     return unauthorizedJson()
+  }
+  if (message === "Forbidden") {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }
   if (/not found/i.test(message)) {
     return NextResponse.json({ error: message }, { status: 404 })
@@ -97,7 +105,13 @@ export function opsApiError(error: unknown) {
 }
 
 export async function requireOpsApi() {
-  await requireOpsSession()
+  await requireActorTenant()
+}
+
+async function actorBoard() {
+  const board = await getActorOpsBoard()
+  if (!board) throw new OpsAccessError(403)
+  return board
 }
 
 export function findOpsColumn(
@@ -131,7 +145,7 @@ async function resolveTaskByIdRef(id: string): Promise<Task | null> {
     }
   }
 
-  const board = await ensureDefaultBoard()
+  const board = await actorBoard()
   const matches = findTasksByRef(extractTasksFromBoard(board), id)
   if (matches.length > 1) {
     throw new Error("Multiple tasks match id")
@@ -150,12 +164,12 @@ export async function resolveOpsTask(query: { id?: string; title?: string }): Pr
   if (id) {
     const task = await resolveTaskByIdRef(id)
     if (!task?.columnId) {
-      throw new Error("Task not found")
+      throw new OpsAccessError(403)
     }
     return serializeOpsTask(task)
   }
 
-  const board = await ensureDefaultBoard()
+  const board = await actorBoard()
   const matches = findActiveTasksByTitle(extractTasksFromBoard(board), title ?? "")
   if (matches.length === 0) {
     throw new Error("Task not found")
@@ -168,7 +182,31 @@ export async function resolveOpsTask(query: { id?: string; title?: string }): Pr
 
 export async function getOpsBoardPayload() {
   await requireOpsApi()
-  const board = await ensureDefaultBoard()
+  const board = await getActorOpsBoard()
+  if (!board) {
+    const fingerprint = fingerprintProcessDatabase()
+    return {
+      board: serializeOpsBoard({
+        id: "",
+        title: "Ops",
+        description: "",
+        slug: "ops",
+        columns: [],
+        activeTasks: [],
+        createdAt: new Date(0).toISOString(),
+        updatedAt: new Date(0).toISOString(),
+        createdBy: "",
+        sharedWith: [],
+      }),
+      diagnostics: {
+        taskCount: 0,
+        boardId: "",
+        boardSlug: null,
+        dbHostSuffix: fingerprint.dbHostSuffix,
+        dbName: fingerprint.dbName,
+      },
+    }
+  }
   return {
     board: serializeOpsBoard(board),
     diagnostics: buildOpsDiagnostics(board),
@@ -176,9 +214,14 @@ export async function getOpsBoardPayload() {
 }
 
 export async function getOpsDiagnosticsPayload() {
-  await requireOpsApi()
-  const board = await ensureDefaultBoard()
-  return { diagnostics: buildOpsDiagnostics(board) }
+  const payload = await getOpsBoardPayload()
+  return { diagnostics: payload.diagnostics }
+}
+
+/** Reject a client board id that is not in the verified tenant. Hints are not authority. */
+export async function assertOwnedBoard(boardId: string | null | undefined) {
+  if (!boardId?.trim()) return
+  await getBoard(boardId.trim())
 }
 
 export async function createOpsTask(input: {
@@ -195,7 +238,7 @@ export async function createOpsTask(input: {
     throw new Error("Title is required")
   }
 
-  const board = await ensureDefaultBoard()
+  const board = await actorBoard()
   const existing = findActiveTaskByTitle(extractTasksFromBoard(board), title)
   if (existing) {
     return {
@@ -246,10 +289,10 @@ export async function moveOpsTask(
     throw new Error("columnTitle or columnId is required")
   }
 
-  const board = await ensureDefaultBoard()
+  const board = await actorBoard()
   const task = (UUID_RE.test(taskId) ? await getTaskById(taskId) : null) ?? (await resolveTaskByIdRef(taskId))
   if (!task?.columnId) {
-    throw new Error("Task not found")
+    throw new OpsAccessError(403)
   }
 
   const column = findOpsColumn(board, {
@@ -257,7 +300,7 @@ export async function moveOpsTask(
     columnTitle: input.columnTitle,
   })
   if (!column) {
-    throw new Error("Column not found")
+    throw new OpsAccessError(403)
   }
 
   let destIndex = Number.MAX_SAFE_INTEGER
@@ -312,10 +355,10 @@ export async function patchOpsTask(
     throw new Error("closeSubStatus must be one of: Closed, No Longer Needed, Duplicate")
   }
 
-  const board = await ensureDefaultBoard()
+  const board = await actorBoard()
   const existing = await getTaskById(taskId)
   if (!existing?.columnId) {
-    throw new Error("Task not found")
+    throw new OpsAccessError(403)
   }
 
   const nextTitle = hasTitle ? title! : existing.title
@@ -335,12 +378,12 @@ export async function patchOpsTask(
     ...(hasCloseSubStatus ? { closeSubStatus: input.closeSubStatus } : {}),
   })
   if (!result.success) {
-    throw new Error(result.error || "Task not found")
+    throw new Error(result.error || "Forbidden")
   }
 
   const updated = await getTaskById(taskId)
   if (!updated) {
-    throw new Error("Task not found")
+    throw new OpsAccessError(403)
   }
   return { task: serializeOpsTask(updated) }
 }
@@ -351,10 +394,10 @@ export async function completeOpsTask(taskId: string, closeSubStatus: string) {
 
 export async function archiveOpsTask(taskId: string) {
   await requireOpsApi()
-  const board = await ensureDefaultBoard()
+  const board = await actorBoard()
   const existing = await getTaskById(taskId)
   if (!existing?.columnId) {
-    throw new Error("Task not found")
+    throw new OpsAccessError(403)
   }
 
   const result = await deleteTask(board.id, existing.columnId, taskId)

@@ -7,7 +7,8 @@
 -- Tenant `fleet` cannot have a row. OPS_BOARD_SECRET stays the fleet secret
 -- and is not a verifier that opens customer tenants.
 --
--- No ENABLE ROW LEVEL SECURITY, no FORCE, no GRANT. Slice C owns RLS.
+-- No ENABLE ROW LEVEL SECURITY, no FORCE, no GRANT.
+-- App-level tenant checks are Slice C. FORCE RLS is a later follow-on.
 -- Safe to re-run. This file does not insert secrets.
 
 CREATE TABLE IF NOT EXISTS tenant_credentials (

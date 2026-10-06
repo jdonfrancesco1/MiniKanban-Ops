@@ -18,8 +18,9 @@ import {
   planOpsTaskPlacements,
 } from "@/lib/db/reconcile-ops"
 import { planGiantSmokeBackfill } from "@/lib/card-copy"
-import { requireOpsSession } from "@/lib/auth/session"
+import { requireActorTenant } from "@/lib/auth/session"
 import { isMissingRelationColumnError } from "@/lib/db/errors"
+import { OpsAccessError, sameTenant } from "@/lib/ops/access"
 import { isCloseSubStatus, nextCloseSubStatus } from "@/lib/close-sub-status"
 import { descriptionIsMissing } from "@/lib/task-description"
 import { isDoneColumnTitle, nextCompletedAt } from "@/lib/task-dates"
@@ -79,29 +80,29 @@ function mapTask(row: TaskRow): Task {
   }
 }
 
-async function loadBoard(boardId: string): Promise<Board | null> {
+async function loadBoard(boardId: string, tenantId: string): Promise<Board | null> {
   await ensureFleetTenantColumns()
   const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(boardId)
 
   const [board] = await db
     .select()
     .from(boards)
-    .where(isUuid ? eq(boards.id, boardId) : eq(boards.slug, boardId))
+    .where(and(eq(boards.tenantId, tenantId), isUuid ? eq(boards.id, boardId) : eq(boards.slug, boardId)))
     .limit(1)
 
-  if (!board) return null
+  if (!board || !sameTenant(tenantId, board.tenantId)) return null
 
   const columnRows = await db
     .select()
     .from(columns)
-    .where(eq(columns.boardId, board.id))
+    .where(and(eq(columns.boardId, board.id), eq(columns.tenantId, tenantId)))
     .orderBy(asc(columns.order), asc(columns.createdAt))
 
   const taskRows = await withTaskSchemaColumns(() =>
     db
       .select()
       .from(tasks)
-      .where(eq(tasks.boardId, board.id))
+      .where(and(eq(tasks.boardId, board.id), eq(tasks.tenantId, tenantId)))
       .orderBy(asc(tasks.order), asc(tasks.createdAt)),
   )
 
@@ -133,7 +134,7 @@ async function loadBoard(boardId: string): Promise<Board | null> {
       await db
         .update(tasks)
         .set({ columnId: fallbackColumnId, updatedAt: now() })
-        .where(eq(tasks.id, row.id))
+        .where(and(eq(tasks.id, row.id), eq(tasks.tenantId, tenantId)))
       const remapped = mapTask({ ...row, columnId: fallbackColumnId })
       remapped.columnId = fallbackColumnId
       remapped.order = startOrder + index
@@ -187,12 +188,13 @@ async function loadBoard(boardId: string): Promise<Board | null> {
 
 async function tenantIdForBoard(boardId: string) {
   await ensureFleetTenantColumns()
+  const tenantId = await requireActorTenant()
   const [board] = await db
     .select({ tenantId: boards.tenantId })
     .from(boards)
-    .where(eq(boards.id, boardId))
+    .where(and(eq(boards.id, boardId), eq(boards.tenantId, tenantId)))
     .limit(1)
-  if (!board) throw new Error("Board not found")
+  if (!board || !sameTenant(tenantId, board.tenantId)) throw new OpsAccessError(403)
   return board.tenantId
 }
 
@@ -209,17 +211,17 @@ async function insertOpsColumns(boardId: string) {
 }
 
 async function ensureOpsColumns(boardId: string) {
+  const tenantId = await tenantIdForBoard(boardId)
   const existing = await db
     .select()
     .from(columns)
-    .where(eq(columns.boardId, boardId))
+    .where(and(eq(columns.boardId, boardId), eq(columns.tenantId, tenantId)))
     .orderBy(asc(columns.order), asc(columns.createdAt))
 
   const missing = missingOpsColumnTitles(existing.map((column) => column.title))
   if (missing.length === 0) return existing
 
   const nextOrder = existing.length === 0 ? 0 : existing[existing.length - 1].order + 1
-  const tenantId = await tenantIdForBoard(boardId)
   await db.insert(columns).values(
     missing.map((title, index) => ({
       boardId,
@@ -231,7 +233,7 @@ async function ensureOpsColumns(boardId: string) {
   return db
     .select()
     .from(columns)
-    .where(eq(columns.boardId, boardId))
+    .where(and(eq(columns.boardId, boardId), eq(columns.tenantId, tenantId)))
     .orderBy(asc(columns.order), asc(columns.createdAt))
 }
 
@@ -290,7 +292,7 @@ async function reconcileOpsTasks(opsBoardId: string) {
         ...(placement.clearArchive ? { archivedAt: null } : {}),
         updatedAt: now(),
       })
-      .where(eq(tasks.id, placement.taskId))
+      .where(and(eq(tasks.id, placement.taskId), eq(tasks.tenantId, tenantId)))
   }
 
   if (placements.length > 0) {
@@ -307,7 +309,11 @@ async function reconcileOpsTasks(opsBoardId: string) {
 }
 
 async function touchBoard(boardId: string) {
-  await db.update(boards).set({ updatedAt: now() }).where(eq(boards.id, boardId))
+  const tenantId = await requireActorTenant()
+  await db
+    .update(boards)
+    .set({ updatedAt: now() })
+    .where(and(eq(boards.id, boardId), eq(boards.tenantId, tenantId)))
 }
 
 export async function ensureTaskBriefColumn() {
@@ -376,8 +382,14 @@ export async function backfillCompletedAtFromUpdatedAt() {
 
 async function columnTitleById(columnId: string | null | undefined) {
   if (!columnId) return null
-  const [column] = await db.select({ title: columns.title }).from(columns).where(eq(columns.id, columnId)).limit(1)
-  return column?.title ?? null
+  const tenantId = await requireActorTenant()
+  const [column] = await db
+    .select({ title: columns.title, tenantId: columns.tenantId })
+    .from(columns)
+    .where(and(eq(columns.id, columnId), eq(columns.tenantId, tenantId)))
+    .limit(1)
+  if (!column || !sameTenant(tenantId, column.tenantId)) return null
+  return column.title ?? null
 }
 
 async function completedAtForColumnChange(fromColumnId: string | null | undefined, toColumnId: string | null | undefined) {
@@ -413,7 +425,7 @@ export async function backfillGiantSmokeCopy() {
         labels: plan.labels,
         updatedAt: now(),
       })
-      .where(eq(tasks.id, row.id))
+      .where(and(eq(tasks.id, row.id), eq(tasks.tenantId, FLEET_TENANT_ID)))
     updated += 1
   }
 
@@ -424,7 +436,12 @@ export async function backfillGiantSmokeCopy() {
 }
 
 export async function ensureDefaultBoard(): Promise<Board> {
-  await requireOpsSession()
+  const tenantId = await requireActorTenant()
+  if (tenantId !== FLEET_TENANT_ID) {
+    const own = await loadBoard(DEFAULT_BOARD_SLUG, tenantId)
+    if (!own) throw new OpsAccessError(403)
+    return toPlainBoard(own)
+  }
   await ensureTaskSchemaColumns()
   await ensureFleetTenantColumns()
 
@@ -459,10 +476,10 @@ export async function ensureDefaultBoard(): Promise<Board> {
       await db
         .update(boards)
         .set({ title: DEFAULT_BOARD_TITLE, updatedAt: now() })
-        .where(eq(boards.id, canonical.id))
+        .where(and(eq(boards.id, canonical.id), eq(boards.tenantId, FLEET_TENANT_ID)))
     }
     await reconcileOpsTasks(canonical.id)
-    const board = await loadBoard(canonical.id)
+    const board = await loadBoard(canonical.id, FLEET_TENANT_ID)
     if (board) return toPlainBoard(board)
   }
 
@@ -478,35 +495,61 @@ export async function ensureDefaultBoard(): Promise<Board> {
 
   await insertOpsColumns(created.id)
   await reconcileOpsTasks(created.id)
-  const board = await loadBoard(created.id)
+  const board = await loadBoard(created.id, FLEET_TENANT_ID)
   if (!board) {
     throw new Error("Failed to create the default ops board")
   }
   return toPlainBoard(board)
 }
 
-export async function getBoard(boardId: string): Promise<Board> {
-  await requireOpsSession()
+/** Read-only ops board for the verified actor. Fleet still self-heals. Customers do not. */
+export async function getActorOpsBoard(): Promise<Board | null> {
+  const tenantId = await requireActorTenant()
+  if (tenantId === FLEET_TENANT_ID) return ensureDefaultBoard()
+  const slugged = await loadBoard(DEFAULT_BOARD_SLUG, tenantId)
+  if (slugged) return toPlainBoard(slugged)
+  const [row] = await db
+    .select({ id: boards.id, tenantId: boards.tenantId })
+    .from(boards)
+    .where(eq(boards.tenantId, tenantId))
+    .orderBy(sql`${boards.updatedAt} desc`)
+    .limit(1)
+  if (!row || !sameTenant(tenantId, row.tenantId)) return null
+  const loaded = await loadBoard(String(row.id), tenantId)
+  return loaded ? toPlainBoard(loaded) : null
+}
 
-  if (boardId === DEFAULT_BOARD_SLUG) {
+export async function getBoard(boardId: string): Promise<Board> {
+  const tenantId = await requireActorTenant()
+
+  if (tenantId === FLEET_TENANT_ID && boardId === DEFAULT_BOARD_SLUG) {
     return ensureDefaultBoard()
   }
 
-  const board = await loadBoard(boardId)
-  if (!board) {
-    throw new Error("Board not found")
-  }
-  if (board.slug === DEFAULT_BOARD_SLUG) {
+  const board = await loadBoard(boardId, tenantId)
+  if (!board) throw new OpsAccessError(403)
+  const owner = await boardTenant(board.id, tenantId)
+  if (!sameTenant(tenantId, owner)) throw new OpsAccessError(403)
+  if (tenantId === FLEET_TENANT_ID && board.slug === DEFAULT_BOARD_SLUG) {
     return ensureDefaultBoard()
   }
   return toPlainBoard(board)
 }
 
-export async function getUserBoards(): Promise<BoardSummary[]> {
-  await requireOpsSession()
-  await ensureDefaultBoard()
+async function boardTenant(boardId: string, tenantId: string) {
+  const [row] = await db
+    .select({ tenantId: boards.tenantId })
+    .from(boards)
+    .where(and(eq(boards.id, boardId), eq(boards.tenantId, tenantId)))
+    .limit(1)
+  return row?.tenantId ?? ""
+}
 
-  const rows = await db.select().from(boards).orderBy(sql`${boards.updatedAt} desc`)
+export async function getUserBoards(): Promise<BoardSummary[]> {
+  const tenantId = await requireActorTenant()
+  if (tenantId === FLEET_TENANT_ID) await ensureDefaultBoard()
+
+  const rows = await db.select().from(boards).where(eq(boards.tenantId, tenantId)).orderBy(sql`${boards.updatedAt} desc`)
 
   const counts = await db
     .select({
@@ -514,7 +557,7 @@ export async function getUserBoards(): Promise<BoardSummary[]> {
       count: sql<number>`count(*)::int`,
     })
     .from(tasks)
-    .where(isNull(tasks.archivedAt))
+    .where(and(eq(tasks.tenantId, tenantId), isNull(tasks.archivedAt)))
     .groupBy(tasks.boardId)
 
   const countByBoard = new Map(counts.map((row) => [row.boardId, Number(row.count)]))
@@ -529,14 +572,14 @@ export async function getUserBoards(): Promise<BoardSummary[]> {
 }
 
 export async function createBoard(title: string, _useProjectPlanningTemplate = false) {
-  await requireOpsSession()
+  const tenantId = await requireActorTenant()
   const trimmed = title.trim() || DEFAULT_BOARD_TITLE
 
   await ensureFleetTenantColumns()
   const [created] = await db
     .insert(boards)
     .values({
-      tenantId: FLEET_TENANT_ID,
+      tenantId,
       title: trimmed,
       description: "",
     })
@@ -554,45 +597,65 @@ export async function createBoard(title: string, _useProjectPlanningTemplate = f
 }
 
 export async function updateBoardTitle(boardId: string, title: string) {
-  await requireOpsSession()
+  const tenantId = await requireActorTenant()
+  const [board] = await db
+    .select({ id: boards.id })
+    .from(boards)
+    .where(and(eq(boards.id, boardId), eq(boards.tenantId, tenantId)))
+    .limit(1)
+  if (!board) throw new OpsAccessError(403)
   await db
     .update(boards)
     .set({ title: title.trim(), updatedAt: now() })
-    .where(eq(boards.id, boardId))
+    .where(and(eq(boards.id, boardId), eq(boards.tenantId, tenantId)))
   return { success: true }
 }
 
 export async function updateBoardDescription(boardId: string, description: string) {
-  await requireOpsSession()
-  await db.update(boards).set({ description, updatedAt: now() }).where(eq(boards.id, boardId))
+  const tenantId = await requireActorTenant()
+  const [board] = await db
+    .select({ id: boards.id })
+    .from(boards)
+    .where(and(eq(boards.id, boardId), eq(boards.tenantId, tenantId)))
+    .limit(1)
+  if (!board) throw new OpsAccessError(403)
+  await db
+    .update(boards)
+    .set({ description, updatedAt: now() })
+    .where(and(eq(boards.id, boardId), eq(boards.tenantId, tenantId)))
   return { success: true }
 }
 
 export async function updateBoardColumns(_boardId: string, _nextColumns: Column[]) {
-  await requireOpsSession()
+  await requireActorTenant()
   return { success: true }
 }
 
 export async function deleteBoard(boardId: string) {
-  await requireOpsSession()
-  const [board] = await db.select().from(boards).where(eq(boards.id, boardId)).limit(1)
-  if (board?.slug === DEFAULT_BOARD_SLUG) {
+  const tenantId = await requireActorTenant()
+  const [board] = await db
+    .select()
+    .from(boards)
+    .where(and(eq(boards.id, boardId), eq(boards.tenantId, tenantId)))
+    .limit(1)
+  if (!board || !sameTenant(tenantId, board.tenantId)) throw new OpsAccessError(403)
+  if (board.slug === DEFAULT_BOARD_SLUG) {
     return { success: false, error: "The default ops board cannot be deleted" }
   }
-  await db.delete(boards).where(eq(boards.id, boardId))
+  await db.delete(boards).where(and(eq(boards.id, boardId), eq(boards.tenantId, tenantId)))
   return { success: true }
 }
 
 export async function addColumn(boardId: string, title: string) {
-  await requireOpsSession()
+  const tenantId = await requireActorTenant()
+  await tenantIdForBoard(boardId)
   const existing = await db
     .select({ order: columns.order })
     .from(columns)
-    .where(eq(columns.boardId, boardId))
+    .where(and(eq(columns.boardId, boardId), eq(columns.tenantId, tenantId)))
     .orderBy(asc(columns.order))
 
   const nextOrder = existing.length === 0 ? 0 : existing[existing.length - 1].order + 1
-  const tenantId = await tenantIdForBoard(boardId)
   const [created] = await db
     .insert(columns)
     .values({ boardId, tenantId, title: title.trim() || "Column", order: nextOrder })
@@ -610,36 +673,45 @@ export async function addColumn(boardId: string, title: string) {
 }
 
 export async function updateColumnTitle(boardId: string, columnId: string, title: string) {
-  await requireOpsSession()
-  await db.update(columns).set({ title: title.trim() }).where(and(eq(columns.id, columnId), eq(columns.boardId, boardId)))
+  const tenantId = await requireActorTenant()
+  const [column] = await db
+    .select({ id: columns.id })
+    .from(columns)
+    .where(and(eq(columns.id, columnId), eq(columns.boardId, boardId), eq(columns.tenantId, tenantId)))
+    .limit(1)
+  if (!column) throw new OpsAccessError(403)
+  await db
+    .update(columns)
+    .set({ title: title.trim() })
+    .where(and(eq(columns.id, columnId), eq(columns.boardId, boardId), eq(columns.tenantId, tenantId)))
   await touchBoard(boardId)
   return { success: true }
 }
 
 export async function deleteColumn(boardId: string, columnId: string) {
-  await requireOpsSession()
+  const tenantId = await requireActorTenant()
   const [removed] = await db
     .select()
     .from(columns)
-    .where(and(eq(columns.id, columnId), eq(columns.boardId, boardId)))
+    .where(and(eq(columns.id, columnId), eq(columns.boardId, boardId), eq(columns.tenantId, tenantId)))
     .limit(1)
 
-  if (!removed) return { success: false, error: "Column not found" }
+  if (!removed || !sameTenant(tenantId, removed.tenantId)) throw new OpsAccessError(403)
 
-  const board = await loadBoard(boardId)
+  const board = await loadBoard(boardId, tenantId)
   const removedColumn = board?.columns.find((column) => column.id === columnId)
 
-  await db.delete(columns).where(eq(columns.id, columnId))
+  await db.delete(columns).where(and(eq(columns.id, columnId), eq(columns.tenantId, tenantId)))
 
   const remaining = await db
     .select()
     .from(columns)
-    .where(eq(columns.boardId, boardId))
+    .where(and(eq(columns.boardId, boardId), eq(columns.tenantId, tenantId)))
     .orderBy(asc(columns.order))
 
   for (const [index, column] of remaining.entries()) {
     if (column.order !== index) {
-      await db.update(columns).set({ order: index }).where(eq(columns.id, column.id))
+      await db.update(columns).set({ order: index }).where(and(eq(columns.id, column.id), eq(columns.tenantId, tenantId)))
     }
   }
 
@@ -648,14 +720,18 @@ export async function deleteColumn(boardId: string, columnId: string) {
 }
 
 export async function restoreColumn(boardId: string, column: Column) {
-  await requireOpsSession()
+  const tenantId = await requireActorTenant()
+  await tenantIdForBoard(boardId)
 
   const [existing] = await db.select().from(columns).where(eq(columns.id, column.id)).limit(1)
+  if (existing && !sameTenant(tenantId, existing.tenantId)) throw new OpsAccessError(403)
   if (existing) {
     return { success: false, error: "Column already exists" }
   }
-
-  const tenantId = await tenantIdForBoard(boardId)
+  for (const task of column.tasks || []) {
+    const [row] = await db.select({ tenantId: tasks.tenantId }).from(tasks).where(eq(tasks.id, task.id)).limit(1)
+    if (row && !sameTenant(tenantId, row.tenantId)) throw new OpsAccessError(403)
+  }
   await db.insert(columns).values({
     id: column.id,
     boardId,
@@ -684,11 +760,11 @@ export async function restoreColumn(boardId: string, column: Column) {
 }
 
 export async function getTaskById(taskId: string): Promise<Task | null> {
-  await requireOpsSession()
+  const tenantId = await requireActorTenant()
   const [row] = await withTaskSchemaColumns(() =>
-    db.select().from(tasks).where(eq(tasks.id, taskId)).limit(1),
+    db.select().from(tasks).where(and(eq(tasks.id, taskId), eq(tasks.tenantId, tenantId))).limit(1),
   )
-  if (!row || row.archivedAt) return null
+  if (!row || !sameTenant(tenantId, row.tenantId) || row.archivedAt) return null
   return mapTask(row)
 }
 
@@ -697,21 +773,21 @@ export async function addTask(
   columnId: string,
   task: Omit<Task, "id" | "createdAt" | "updatedAt" | "createdBy">,
 ) {
-  await requireOpsSession()
+  const tenantId = await requireActorTenant()
   await ensureFleetTenantColumns()
 
   const [column] = await db
     .select()
     .from(columns)
-    .where(and(eq(columns.id, columnId), eq(columns.boardId, boardId)))
+    .where(and(eq(columns.id, columnId), eq(columns.boardId, boardId), eq(columns.tenantId, tenantId)))
     .limit(1)
 
-  if (!column) return null
+  if (!column || !sameTenant(tenantId, column.tenantId)) throw new OpsAccessError(403)
 
   const existing = await db
     .select({ order: tasks.order })
     .from(tasks)
-    .where(and(eq(tasks.columnId, columnId), isNull(tasks.archivedAt)))
+    .where(and(eq(tasks.columnId, columnId), eq(tasks.tenantId, tenantId), isNull(tasks.archivedAt)))
     .orderBy(asc(tasks.order))
 
   const nextOrder = existing.length === 0 ? 0 : existing[existing.length - 1].order + 1
@@ -738,7 +814,7 @@ export async function addTask(
       .values({
         boardId,
         columnId,
-        tenantId: column.tenantId,
+        tenantId,
         title,
         description,
         brief: smoke?.brief ?? task.brief ?? "",
@@ -760,17 +836,17 @@ export async function updateTask(
   taskId: string,
   updates: Partial<Omit<Task, "id" | "createdAt" | "createdBy" | "archivedAt">>,
 ) {
-  await requireOpsSession()
+  const tenantId = await requireActorTenant()
 
   const [existing] = await withTaskSchemaColumns(() =>
     db
       .select()
       .from(tasks)
-      .where(and(eq(tasks.id, taskId), eq(tasks.boardId, boardId)))
+      .where(and(eq(tasks.id, taskId), eq(tasks.boardId, boardId), eq(tasks.tenantId, tenantId)))
       .limit(1),
   )
 
-  if (!existing) return { success: false, error: "Task not found" }
+  if (!existing || !sameTenant(tenantId, existing.tenantId)) throw new OpsAccessError(403)
 
   if (updates.description !== undefined && descriptionIsMissing(updates.description)) {
     return {
@@ -791,6 +867,14 @@ export async function updateTask(
   }
 
   const nextColumnId = updates.columnId && updates.columnId !== existing.columnId ? updates.columnId : existing.columnId
+  if (nextColumnId !== existing.columnId) {
+    const [dest] = await db
+      .select({ id: columns.id })
+      .from(columns)
+      .where(and(eq(columns.id, nextColumnId), eq(columns.boardId, boardId), eq(columns.tenantId, tenantId)))
+      .limit(1)
+    if (!dest) throw new OpsAccessError(403)
+  }
   const completedPatch = await completedAtForColumnChange(existing.columnId, nextColumnId)
 
   await withTaskSchemaColumns(() =>
@@ -806,7 +890,7 @@ export async function updateTask(
         ...completedPatch,
         ...closePatch,
       })
-      .where(eq(tasks.id, taskId)),
+      .where(and(eq(tasks.id, taskId), eq(tasks.tenantId, tenantId))),
   )
 
   await touchBoard(boardId)
@@ -815,18 +899,21 @@ export async function updateTask(
 }
 
 export async function deleteTask(boardId: string, columnId: string, taskId: string) {
-  await requireOpsSession()
+  const tenantId = await requireActorTenant()
 
   const [existing] = await db
     .select()
     .from(tasks)
-    .where(and(eq(tasks.id, taskId), eq(tasks.boardId, boardId)))
+    .where(and(eq(tasks.id, taskId), eq(tasks.boardId, boardId), eq(tasks.tenantId, tenantId)))
     .limit(1)
 
-  if (!existing) return { success: false, error: "Task not found" }
+  if (!existing || !sameTenant(tenantId, existing.tenantId)) throw new OpsAccessError(403)
 
   const archivedAt = now()
-  await db.update(tasks).set({ archivedAt, updatedAt: archivedAt }).where(eq(tasks.id, taskId))
+  await db
+    .update(tasks)
+    .set({ archivedAt, updatedAt: archivedAt })
+    .where(and(eq(tasks.id, taskId), eq(tasks.tenantId, tenantId)))
   await touchBoard(boardId)
 
   return {
@@ -839,7 +926,8 @@ export async function deleteTask(boardId: string, columnId: string, taskId: stri
 }
 
 export async function restoreTask(boardId: string, columnIdOrTaskId: string, task?: Task) {
-  await requireOpsSession()
+  const tenantId = await requireActorTenant()
+  await tenantIdForBoard(boardId)
 
   const taskId = task?.id ?? columnIdOrTaskId
   const preferredColumnId = task?.columnId ?? (task ? columnIdOrTaskId : undefined)
@@ -847,14 +935,22 @@ export async function restoreTask(boardId: string, columnIdOrTaskId: string, tas
   const [existing] = await db
     .select()
     .from(tasks)
-    .where(and(eq(tasks.id, taskId), eq(tasks.boardId, boardId)))
+    .where(and(eq(tasks.id, taskId), eq(tasks.boardId, boardId), eq(tasks.tenantId, tenantId)))
     .limit(1)
 
   if (!existing) {
-    if (!task) return { success: false, error: "Task not found" }
+    if (!task) throw new OpsAccessError(403)
+    const [anyRow] = await db.select({ tenantId: tasks.tenantId }).from(tasks).where(eq(tasks.id, taskId)).limit(1)
+    if (anyRow && !sameTenant(tenantId, anyRow.tenantId)) throw new OpsAccessError(403)
+    if (anyRow) return { success: false, error: "Task already exists" }
     const restoreColumnId = preferredColumnId || columnIdOrTaskId
+    const [restoreColumn] = await db
+      .select({ id: columns.id })
+      .from(columns)
+      .where(and(eq(columns.id, restoreColumnId), eq(columns.boardId, boardId), eq(columns.tenantId, tenantId)))
+      .limit(1)
+    if (!restoreColumn) throw new OpsAccessError(403)
     const restoreTitle = await columnTitleById(restoreColumnId)
-    const tenantId = await tenantIdForBoard(boardId)
     await db.insert(tasks).values({
       id: task.id,
       boardId,
@@ -882,12 +978,17 @@ export async function restoreTask(boardId: string, columnIdOrTaskId: string, tas
   let [resolvedColumn] = await db
     .select()
     .from(columns)
-    .where(and(eq(columns.id, columnId), eq(columns.boardId, boardId)))
+    .where(and(eq(columns.id, columnId), eq(columns.boardId, boardId), eq(columns.tenantId, tenantId)))
     .limit(1)
 
   if (!resolvedColumn) {
     const fallback =
-      (await db.select().from(columns).where(eq(columns.boardId, boardId)).orderBy(asc(columns.order)).limit(1))[0]
+      (await db
+        .select()
+        .from(columns)
+        .where(and(eq(columns.boardId, boardId), eq(columns.tenantId, tenantId)))
+        .orderBy(asc(columns.order))
+        .limit(1))[0]
     if (!fallback) return { success: false, error: "No columns available" }
     columnId = fallback.id
     resolvedColumn = fallback
@@ -899,15 +1000,23 @@ export async function restoreTask(boardId: string, columnIdOrTaskId: string, tas
     db
       .update(tasks)
       .set({ archivedAt: null, columnId, updatedAt: now(), ...completedPatch, ...closePatch })
-      .where(eq(tasks.id, taskId)),
+      .where(and(eq(tasks.id, taskId), eq(tasks.tenantId, tenantId))),
   )
   await touchBoard(boardId)
   return { success: true }
 }
 
 export async function permanentlyDeleteTask(boardId: string, taskId: string) {
-  await requireOpsSession()
-  await db.delete(tasks).where(and(eq(tasks.id, taskId), eq(tasks.boardId, boardId), isNotNull(tasks.archivedAt)))
+  const tenantId = await requireActorTenant()
+  const [existing] = await db
+    .select({ id: tasks.id })
+    .from(tasks)
+    .where(and(eq(tasks.id, taskId), eq(tasks.boardId, boardId), eq(tasks.tenantId, tenantId), isNotNull(tasks.archivedAt)))
+    .limit(1)
+  if (!existing) throw new OpsAccessError(403)
+  await db
+    .delete(tasks)
+    .where(and(eq(tasks.id, taskId), eq(tasks.boardId, boardId), eq(tasks.tenantId, tenantId), isNotNull(tasks.archivedAt)))
   await touchBoard(boardId)
   return { success: true }
 }
@@ -920,7 +1029,24 @@ export async function moveTask(
   targetPosition: number,
   options?: { closeSubStatus?: string | null },
 ) {
-  await requireOpsSession()
+  const tenantId = await requireActorTenant()
+  const [owned] = await db
+    .select({ id: tasks.id })
+    .from(tasks)
+    .where(and(eq(tasks.id, taskId), eq(tasks.boardId, boardId), eq(tasks.tenantId, tenantId)))
+    .limit(1)
+  if (!owned) throw new OpsAccessError(403)
+  const [sourceColumn] = await db
+    .select({ id: columns.id })
+    .from(columns)
+    .where(and(eq(columns.id, sourceColumnId), eq(columns.boardId, boardId), eq(columns.tenantId, tenantId)))
+    .limit(1)
+  const [destColumn] = await db
+    .select({ id: columns.id })
+    .from(columns)
+    .where(and(eq(columns.id, destinationColumnId), eq(columns.boardId, boardId), eq(columns.tenantId, tenantId)))
+    .limit(1)
+  if (!sourceColumn || !destColumn) throw new OpsAccessError(403)
 
   const fromTitle = await columnTitleById(sourceColumnId)
   const toTitle = await columnTitleById(destinationColumnId)
@@ -937,7 +1063,7 @@ export async function moveTask(
     db
       .select()
       .from(tasks)
-      .where(and(eq(tasks.columnId, destinationColumnId), isNull(tasks.archivedAt)))
+      .where(and(eq(tasks.columnId, destinationColumnId), eq(tasks.tenantId, tenantId), isNull(tasks.archivedAt)))
       .orderBy(asc(tasks.order)),
   )
 
@@ -955,23 +1081,26 @@ export async function moveTask(
           ...completedPatch,
           ...closePatch,
         })
-        .where(and(eq(tasks.id, taskId), eq(tasks.boardId, boardId))),
+        .where(and(eq(tasks.id, taskId), eq(tasks.boardId, boardId), eq(tasks.tenantId, tenantId))),
     )
   }
 
   for (const [index, task] of withoutMoved.entries()) {
-    await db.update(tasks).set({ order: index, updatedAt: now() }).where(eq(tasks.id, task.id))
+    await db
+      .update(tasks)
+      .set({ order: index, updatedAt: now() })
+      .where(and(eq(tasks.id, task.id), eq(tasks.tenantId, tenantId)))
   }
 
   if (sourceColumnId !== destinationColumnId) {
     const sourceTasks = await db
       .select()
       .from(tasks)
-      .where(and(eq(tasks.columnId, sourceColumnId), isNull(tasks.archivedAt)))
+      .where(and(eq(tasks.columnId, sourceColumnId), eq(tasks.tenantId, tenantId), isNull(tasks.archivedAt)))
       .orderBy(asc(tasks.order))
 
     for (const [index, task] of sourceTasks.entries()) {
-      await db.update(tasks).set({ order: index }).where(eq(tasks.id, task.id))
+      await db.update(tasks).set({ order: index }).where(and(eq(tasks.id, task.id), eq(tasks.tenantId, tenantId)))
     }
   }
 
@@ -980,31 +1109,40 @@ export async function moveTask(
 }
 
 export async function updateColumnOrder(boardId: string, columnIds: string[]) {
-  await requireOpsSession()
+  const tenantId = await requireActorTenant()
+  await tenantIdForBoard(boardId)
   for (const [index, columnId] of columnIds.entries()) {
     await db
       .update(columns)
       .set({ order: index })
-      .where(and(eq(columns.id, columnId), eq(columns.boardId, boardId)))
+      .where(and(eq(columns.id, columnId), eq(columns.boardId, boardId), eq(columns.tenantId, tenantId)))
   }
   await touchBoard(boardId)
   return { success: true }
 }
 
 export async function updateTaskOrder(boardId: string, columnId: string, taskIds: string[]) {
-  await requireOpsSession()
+  const tenantId = await requireActorTenant()
+  await tenantIdForBoard(boardId)
   for (const [index, taskId] of taskIds.entries()) {
     await db
       .update(tasks)
       .set({ order: index, updatedAt: now() })
-      .where(and(eq(tasks.id, taskId), eq(tasks.columnId, columnId), eq(tasks.boardId, boardId)))
+      .where(
+        and(
+          eq(tasks.id, taskId),
+          eq(tasks.columnId, columnId),
+          eq(tasks.boardId, boardId),
+          eq(tasks.tenantId, tenantId),
+        ),
+      )
   }
   await touchBoard(boardId)
   return { success: true }
 }
 
 export async function shareBoard(_boardId: string, _userPhone: string) {
-  await requireOpsSession()
+  await requireActorTenant()
   return {
     success: false,
     message: "Sharing is disabled on this single-user ops board.",
@@ -1012,6 +1150,6 @@ export async function shareBoard(_boardId: string, _userPhone: string) {
 }
 
 export async function removeUserFromBoard(_boardId: string, _userId: string) {
-  await requireOpsSession()
+  await requireActorTenant()
   return { success: true }
 }

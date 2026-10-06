@@ -1,4 +1,5 @@
 import type { TenantCredentialRecord } from "../auth/credentials.ts"
+import { FLEET_TENANT_ID } from "../db/ops-defaults.ts"
 import { verifyOpsSecret } from "../auth/token.ts"
 import { presentedMcpSecret, resolveMcpAccess } from "./auth.ts"
 import {
@@ -14,7 +15,10 @@ import { MCP_TOOL_NAMES, type OpsToolPort } from "./tools.ts"
 
 export type McpHttpOptions = {
   expectedSecret?: string | undefined
+  /** Fleet port. Used only when the verified tenant is fleet. */
   port: OpsToolPort
+  /** Customer bearers use this port bound to their tenant. Missing means 403, never the fleet port. */
+  portForTenant?: (tenantId: string) => OpsToolPort
   customerCredentials?: readonly TenantCredentialRecord[]
   loadCustomerCredentials?: () => Promise<readonly TenantCredentialRecord[]>
 }
@@ -113,10 +117,13 @@ export async function handleMcpHttp(request: Request, options: McpHttpOptions): 
   const fleetHit = Boolean(presented && fleetSecret && verifyOpsSecret(presented, fleetSecret))
   const records = presented && !fleetHit ? await customerRecords(options) : []
   const access = await resolveMcpAccess({ presented, fleetSecret, records, production })
-  if (!access.allowFleetTools) {
+  if (!access.ok) {
     if (access.status === 403) return jsonResponse(403, { error: "Forbidden" })
     return mcpUnauthorizedResponse()
   }
+  const port =
+    access.tenantId === FLEET_TENANT_ID ? options.port : options.portForTenant?.(access.tenantId)
+  if (!port) return jsonResponse(403, { error: "Forbidden" })
 
   if (request.method === "OPTIONS") return mcpCorsPreflight()
 
@@ -147,7 +154,7 @@ export async function handleMcpHttp(request: Request, options: McpHttpOptions): 
     return jsonResponse(400, parsed.error)
   }
 
-  const dispatched = await dispatchMcpMessage(parsed.value, options.port)
+  const dispatched = await dispatchMcpMessage(parsed.value, port)
   const extra = sessionHeaders(request, true)
 
   if (dispatched.notificationOnly) {

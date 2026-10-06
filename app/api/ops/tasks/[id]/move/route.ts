@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { moveOpsTask, opsApiError } from "@/lib/api/ops"
+import { assertOwnedBoard, moveOpsTask, opsApiError } from "@/lib/api/ops"
 
 export const dynamic = "force-dynamic"
 
@@ -14,6 +14,7 @@ export async function POST(request: Request, context: RouteContext) {
       position?: unknown
       beforeTaskId?: unknown
       closeSubStatus?: unknown
+      boardId?: unknown
     }
     if (body.columnTitle !== undefined && typeof body.columnTitle !== "string") {
       return NextResponse.json({ error: "columnTitle must be a string" }, { status: 400 })
@@ -33,6 +34,10 @@ export async function POST(request: Request, context: RouteContext) {
     if (!body.columnTitle && !body.columnId) {
       return NextResponse.json({ error: "columnTitle or columnId is required" }, { status: 400 })
     }
+    if (body.boardId !== undefined && typeof body.boardId !== "string") {
+      return NextResponse.json({ error: "boardId must be a string" }, { status: 400 })
+    }
+    await assertOwnedBoard(typeof body.boardId === "string" ? body.boardId : undefined)
 
     return NextResponse.json(
       await moveOpsTask(id, {

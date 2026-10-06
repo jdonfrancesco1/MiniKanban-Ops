@@ -15,8 +15,8 @@ export type McpAuthResult =
   | { ok: false; status: 401; error: "Unauthorized" }
 
 export type McpAccess =
-  | { allowFleetTools: true; tenantId: typeof FLEET_TENANT_ID; uid: typeof FLEET_UID }
-  | { allowFleetTools: false; status: 401 | 403; tenantId?: string }
+  | { ok: true; tenantId: string; uid: string }
+  | { ok: false; status: 401 | 403; error: "Unauthorized" | "Forbidden" }
 
 /** Same presentation as `/api/ops/*`: Bearer, then X-Ops-Board-Secret. */
 export function presentedMcpSecret(headers: McpHeaderSource): string | null {
@@ -45,8 +45,9 @@ export function authorizeMcpRequest(
 }
 
 /**
- * Fleet secret runs fleet tools. A customer secret resolves to that tenant
- * and does not run fleet tools. Missing credentials fail closed in production.
+ * Fleet secret is tenant fleet. A customer secret is that tenant only.
+ * Callers must bind tools to access.tenantId. A customer bearer must not
+ * fall through to the fleet port. Missing credentials fail closed in production.
  */
 export async function resolveMcpAccess(input: {
   presented: string | null
@@ -57,14 +58,14 @@ export async function resolveMcpAccess(input: {
   const presented = input.presented?.trim() || ""
   const fleetSecret = input.fleetSecret ?? ""
   if (presented && fleetSecret && verifyOpsSecret(presented, fleetSecret)) {
-    return { allowFleetTools: true, tenantId: FLEET_TENANT_ID, uid: FLEET_UID }
+    return { ok: true, tenantId: FLEET_TENANT_ID, uid: FLEET_UID }
   }
   if (presented) {
     const customer = await resolveCustomerCredential(presented, input.records)
-    if (customer) return { allowFleetTools: false, status: 403, tenantId: customer.tenantId }
+    if (customer) return { ok: true, tenantId: customer.tenantId, uid: `tenant:${customer.tenantId}` }
   }
   if (!presented && !fleetSecret && !input.production) {
-    return { allowFleetTools: true, tenantId: FLEET_TENANT_ID, uid: FLEET_UID }
+    return { ok: true, tenantId: FLEET_TENANT_ID, uid: FLEET_UID }
   }
-  return { allowFleetTools: false, status: 401 }
+  return { ok: false, status: 401, error: "Unauthorized" }
 }

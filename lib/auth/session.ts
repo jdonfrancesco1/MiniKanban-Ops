@@ -3,6 +3,7 @@ import { loadTenantCredentialRecords } from "@/lib/auth/credential-store"
 import { decideRequestAuth } from "@/lib/auth/decide"
 import { getPresentedOpsSecret } from "@/lib/auth/request"
 import { customerSessionSigningKey } from "@/lib/auth/tenant-session"
+import { OpsAccessError } from "@/lib/ops/access"
 import {
   createSessionToken,
   isAuthGateEnabled,
@@ -49,8 +50,15 @@ export async function isOpsAuthenticated() {
 export async function requireOpsSession() {
   const ok = await isOpsAuthenticated()
   if (!ok) {
-    throw new Error("Unauthorized")
+    throw new OpsAccessError(401)
   }
+}
+
+/** Fleet or customer. Tenant comes from the verified cookie or bearer only. */
+export async function requireActorTenant() {
+  const identity = await resolveAuthIdentity()
+  if (!identity?.tenantId) throw new OpsAccessError(401)
+  return identity.tenantId
 }
 
 async function writeSessionCookie(value: string) {

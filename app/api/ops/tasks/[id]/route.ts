@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { archiveOpsTask, opsApiError, patchOpsTask } from "@/lib/api/ops"
+import { archiveOpsTask, assertOwnedBoard, opsApiError, patchOpsTask } from "@/lib/api/ops"
 
 export const dynamic = "force-dynamic"
 
@@ -14,6 +14,7 @@ export async function PATCH(request: Request, context: RouteContext) {
       brief?: unknown
       labels?: unknown
       closeSubStatus?: unknown
+      boardId?: unknown
     }
     if (body.title !== undefined && typeof body.title !== "string") {
       return NextResponse.json({ error: "title must be a string" }, { status: 400 })
@@ -30,6 +31,10 @@ export async function PATCH(request: Request, context: RouteContext) {
     if (body.closeSubStatus !== undefined && body.closeSubStatus !== null && typeof body.closeSubStatus !== "string") {
       return NextResponse.json({ error: "closeSubStatus must be a string" }, { status: 400 })
     }
+    if (body.boardId !== undefined && typeof body.boardId !== "string") {
+      return NextResponse.json({ error: "boardId must be a string" }, { status: 400 })
+    }
+    await assertOwnedBoard(typeof body.boardId === "string" ? body.boardId : undefined)
 
     return NextResponse.json(
       await patchOpsTask(id, {
