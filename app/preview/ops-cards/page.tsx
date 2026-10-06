@@ -4,6 +4,8 @@ import { useMemo, useState } from "react"
 import KanbanBoard from "@/components/kanban-board"
 import { ProjectFilter } from "@/components/project-chip"
 import { completedAtForColumnMove, placeTaskBefore } from "@/lib/kanban-dnd"
+import { isDoneColumnTitle } from "@/lib/task-dates"
+import type { CloseSubStatus } from "@/lib/close-sub-status"
 import { filterTasksByProject, type ProjectFilterValue } from "@/lib/projects"
 import { buildOpsCardPreviewTasks } from "@/lib/preview-ops-cards"
 import type { Column, Task } from "@/lib/types"
@@ -73,18 +75,36 @@ export default function OpsCardPreviewPage() {
           onTaskDelete={(taskId) => {
             setTasks((current) => current.filter((task) => task.id !== taskId))
           }}
-          onTaskMove={(taskId, destColumnId, beforeTaskId, sourceColumnId) => {
+          onTaskMove={(taskId, destColumnId, beforeTaskId, sourceColumnId, closeSubStatus) => {
+            const fromTitle = previewColumns.find((column) => column.id === sourceColumnId)?.title
+            const toTitle = previewColumns.find((column) => column.id === destColumnId)?.title
+            const enteringDone = !isDoneColumnTitle(fromTitle) && isDoneColumnTitle(toTitle)
+            const leavingDone = isDoneColumnTitle(fromTitle) && !isDoneColumnTitle(toTitle)
             setTasks((current) =>
               placeTaskBefore(current, {
                 taskId,
                 destColumnId,
                 beforeTaskId,
-                completedAt: completedAtForColumnMove({
-                  fromTitle: previewColumns.find((column) => column.id === sourceColumnId)?.title,
-                  toTitle: previewColumns.find((column) => column.id === destColumnId)?.title,
-                }),
+                completedAt: completedAtForColumnMove({ fromTitle, toTitle }),
+                closeSubStatus: enteringDone ? closeSubStatus : leavingDone ? null : undefined,
               }),
             )
+          }}
+          onCloseSubStatus={(taskId, closeSubStatus: CloseSubStatus) => {
+            setTasks((current) => {
+              const task = current.find((item) => item.id === taskId)
+              const fromTitle = previewColumns.find((column) => column.id === task?.columnId)?.title
+              if (!task || isDoneColumnTitle(fromTitle)) {
+                return current.map((item) => (item.id === taskId ? { ...item, closeSubStatus } : item))
+              }
+              return placeTaskBefore(current, {
+                taskId,
+                destColumnId: "done",
+                beforeTaskId: null,
+                completedAt: completedAtForColumnMove({ fromTitle, toTitle: "Done" }),
+                closeSubStatus,
+              })
+            })
           }}
         />
       </div>

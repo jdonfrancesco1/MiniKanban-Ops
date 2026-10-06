@@ -18,6 +18,8 @@ import {
 import { planGiantSmokeBackfill } from "@/lib/card-copy"
 import { requireOpsSession } from "@/lib/auth/session"
 import { isMissingRelationColumnError } from "@/lib/db/errors"
+import { isCloseSubStatus, nextCloseSubStatus } from "@/lib/close-sub-status"
+import { descriptionIsMissing } from "@/lib/task-description"
 import { isDoneColumnTitle, nextCompletedAt } from "@/lib/task-dates"
 import { toFlightSafeBoard, type Board, type BoardSummary, type Column, type Task } from "@/lib/types"
 
@@ -66,6 +68,7 @@ function mapTask(row: TaskRow): Task {
     createdAt: toIso(row.createdAt),
     updatedAt: toIso(row.updatedAt),
     completedAt: toIso(row.completedAt) ?? null,
+    closeSubStatus: row.closeSubStatus ?? null,
     createdBy: "ops",
     archivedAt: hidden && archivedAt ? archivedAt.getTime() : undefined,
     columnId: String(row.columnId),
@@ -295,9 +298,29 @@ export async function ensureTaskCompletedAtColumn() {
   await db.execute(sql`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS completed_at timestamptz`)
 }
 
+export async function ensureTaskCloseSubStatusColumn() {
+  await db.execute(sql`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS close_sub_status text`)
+  await db.execute(sql`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'tasks_close_sub_status_check'
+      ) THEN
+        ALTER TABLE tasks
+          ADD CONSTRAINT tasks_close_sub_status_check
+          CHECK (
+            close_sub_status IS NULL
+            OR close_sub_status IN ('Closed', 'No Longer Needed', 'Duplicate')
+          );
+      END IF;
+    END $$
+  `)
+}
+
 export async function ensureTaskSchemaColumns() {
   await ensureTaskBriefColumn()
   await ensureTaskCompletedAtColumn()
+  await ensureTaskCloseSubStatusColumn()
 }
 
 async function withTaskSchemaColumns<T>(run: () => Promise<T>): Promise<T> {
@@ -306,7 +329,8 @@ async function withTaskSchemaColumns<T>(run: () => Promise<T>): Promise<T> {
   } catch (error) {
     const missingBrief = isMissingRelationColumnError(error, "brief")
     const missingCompleted = isMissingRelationColumnError(error, "completed_at")
-    if (!missingBrief && !missingCompleted) throw error
+    const missingClose = isMissingRelationColumnError(error, "close_sub_status")
+    if (!missingBrief && !missingCompleted && !missingClose) throw error
     await ensureTaskSchemaColumns()
     return await run()
   }
@@ -663,6 +687,14 @@ export async function addTask(
     description: task.description,
     labels: task.labels,
   })
+  const description = smoke?.description ?? task.description ?? ""
+  if (descriptionIsMissing(description)) {
+    throw new Error("Description is required. Add the full ask — the empty placeholder is not a description.")
+  }
+  const createdInDone = isDoneColumnTitle(column.title)
+  if (createdInDone && !isCloseSubStatus(task.closeSubStatus)) {
+    throw new Error("closeSubStatus is required and must be one of: Closed, No Longer Needed, Duplicate")
+  }
 
   const [created] = await withTaskSchemaColumns(() =>
     db
@@ -671,11 +703,12 @@ export async function addTask(
         boardId,
         columnId,
         title,
-        description: smoke?.description ?? task.description ?? "",
+        description,
         brief: smoke?.brief ?? task.brief ?? "",
         labels: smoke?.labels ?? task.labels ?? [],
         order: nextOrder,
-        completedAt: isDoneColumnTitle(column.title) ? now() : null,
+        completedAt: createdInDone ? now() : null,
+        closeSubStatus: createdInDone && isCloseSubStatus(task.closeSubStatus) ? task.closeSubStatus : null,
       })
       .returning(),
   )
@@ -702,6 +735,24 @@ export async function updateTask(
 
   if (!existing) return { success: false, error: "Task not found" }
 
+  if (updates.description !== undefined && descriptionIsMissing(updates.description)) {
+    return {
+      success: false,
+      error: "Description is required. Add the full ask — the empty placeholder is not a description.",
+    }
+  }
+
+  let closePatch: { closeSubStatus?: string | null } = {}
+  if (updates.closeSubStatus !== undefined) {
+    if (updates.closeSubStatus === null) {
+      closePatch = { closeSubStatus: null }
+    } else if (!isCloseSubStatus(updates.closeSubStatus)) {
+      return { success: false, error: "closeSubStatus must be one of: Closed, No Longer Needed, Duplicate" }
+    } else {
+      closePatch = { closeSubStatus: updates.closeSubStatus }
+    }
+  }
+
   const nextColumnId = updates.columnId && updates.columnId !== existing.columnId ? updates.columnId : existing.columnId
   const completedPatch = await completedAtForColumnChange(existing.columnId, nextColumnId)
 
@@ -716,6 +767,7 @@ export async function updateTask(
         columnId: nextColumnId,
         updatedAt: now(),
         ...completedPatch,
+        ...closePatch,
       })
       .where(eq(tasks.id, taskId)),
   )
@@ -780,30 +832,36 @@ export async function restoreTask(boardId: string, columnIdOrTaskId: string, tas
         : isDoneColumnTitle(restoreTitle)
           ? now()
           : null,
+      closeSubStatus:
+        isDoneColumnTitle(restoreTitle) && isCloseSubStatus(task.closeSubStatus) ? task.closeSubStatus : null,
     })
     await touchBoard(boardId)
     return { success: true }
   }
 
   let columnId = preferredColumnId || existing.columnId
-  const [column] = await db
+  let [resolvedColumn] = await db
     .select()
     .from(columns)
     .where(and(eq(columns.id, columnId), eq(columns.boardId, boardId)))
     .limit(1)
 
-  if (!column) {
+  if (!resolvedColumn) {
     const fallback =
       (await db.select().from(columns).where(eq(columns.boardId, boardId)).orderBy(asc(columns.order)).limit(1))[0]
     if (!fallback) return { success: false, error: "No columns available" }
     columnId = fallback.id
+    resolvedColumn = fallback
   }
 
   const completedPatch = await completedAtForColumnChange(existing.columnId, columnId)
-  await db
-    .update(tasks)
-    .set({ archivedAt: null, columnId, updatedAt: now(), ...completedPatch })
-    .where(eq(tasks.id, taskId))
+  const closePatch = isDoneColumnTitle(resolvedColumn.title) ? {} : { closeSubStatus: null }
+  await withTaskSchemaColumns(() =>
+    db
+      .update(tasks)
+      .set({ archivedAt: null, columnId, updatedAt: now(), ...completedPatch, ...closePatch })
+      .where(eq(tasks.id, taskId)),
+  )
   await touchBoard(boardId)
   return { success: true }
 }
@@ -821,25 +879,43 @@ export async function moveTask(
   taskId: string,
   destinationColumnId: string,
   targetPosition: number,
+  options?: { closeSubStatus?: string | null },
 ) {
   await requireOpsSession()
 
-  const destTasks = await db
-    .select()
-    .from(tasks)
-    .where(and(eq(tasks.columnId, destinationColumnId), isNull(tasks.archivedAt)))
-    .orderBy(asc(tasks.order))
+  const fromTitle = await columnTitleById(sourceColumnId)
+  const toTitle = await columnTitleById(destinationColumnId)
+  const completedStamped = nextCompletedAt({ fromTitle, toTitle, now: now() })
+  const completedPatch = completedStamped === undefined ? {} : { completedAt: completedStamped }
+  const nextStatus = nextCloseSubStatus({
+    fromTitle,
+    toTitle,
+    closeSubStatus: options?.closeSubStatus,
+  })
+  const closePatch = nextStatus === undefined ? {} : { closeSubStatus: nextStatus }
+
+  const destTasks = await withTaskSchemaColumns(() =>
+    db
+      .select()
+      .from(tasks)
+      .where(and(eq(tasks.columnId, destinationColumnId), isNull(tasks.archivedAt)))
+      .orderBy(asc(tasks.order)),
+  )
 
   const withoutMoved = destTasks.filter((task) => task.id !== taskId)
   const clamped = Math.max(0, Math.min(targetPosition, withoutMoved.length))
   withoutMoved.splice(clamped, 0, { id: taskId } as TaskRow)
 
-  if (sourceColumnId !== destinationColumnId) {
-    const completedPatch = await completedAtForColumnChange(sourceColumnId, destinationColumnId)
+  if (sourceColumnId !== destinationColumnId || Object.keys(closePatch).length > 0) {
     await withTaskSchemaColumns(() =>
       db
         .update(tasks)
-        .set({ columnId: destinationColumnId, updatedAt: now(), ...completedPatch })
+        .set({
+          ...(sourceColumnId !== destinationColumnId ? { columnId: destinationColumnId } : {}),
+          updatedAt: now(),
+          ...completedPatch,
+          ...closePatch,
+        })
         .where(and(eq(tasks.id, taskId), eq(tasks.boardId, boardId))),
     )
   }

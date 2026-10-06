@@ -90,4 +90,41 @@ test.describe("ops cards live drag + short ids", () => {
       })
       .not.toBe(firstId)
   })
+
+  test("dropping onto Done requires a close sub-status and cancel puts the card back", async ({ page }) => {
+    await page.goto("/preview/ops-cards")
+    const card = page.locator('[data-testid="ops-task-card"][data-task-id="paylyte"]')
+    const dest = page.locator('[data-testid="kanban-column-drop"][data-column-id="done"]')
+    await expect(card).toBeVisible()
+
+    const dropOnDone = async () => {
+      await dest.scrollIntoViewIfNeeded()
+      const start = await startCardDrag(page, card)
+      const destBox = await dest.boundingBox()
+      if (!destBox) throw new Error("missing Done column geometry")
+      await page.mouse.move(destBox.x + destBox.width / 2, destBox.y + Math.min(80, destBox.height / 2), { steps: 14 })
+      await page.mouse.up()
+      void start
+    }
+
+    await dropOnDone()
+    const dialog = page.getByTestId("close-sub-status-dialog")
+    await expect(dialog).toBeVisible()
+    await expect(dialog.getByText("Closed", { exact: true })).toBeVisible()
+    await expect(dialog.getByText("No Longer Needed", { exact: true })).toBeVisible()
+    await expect(dialog.getByText("Duplicate", { exact: true })).toBeVisible()
+    await expect(page.getByTestId("close-sub-status-confirm")).toBeDisabled()
+    await dialog.getByRole("button", { name: "Cancel" }).click()
+    await expect(dialog).toBeHidden()
+    await expect(page.locator('[data-column-id="need-you"] [data-task-id="paylyte"]')).toBeVisible()
+    await expect(page.locator('[data-column-id="done"] [data-task-id="paylyte"]')).toHaveCount(0)
+
+    await dropOnDone()
+    await expect(dialog).toBeVisible()
+    await dialog.getByText("Duplicate", { exact: true }).click()
+    await page.getByTestId("close-sub-status-confirm").click()
+    const doneCard = page.locator('[data-column-id="done"] [data-task-id="paylyte"]')
+    await expect(doneCard).toBeVisible()
+    await expect(doneCard.getByTestId("close-sub-status")).toHaveText("Duplicate")
+  })
 })

@@ -1,6 +1,9 @@
 "use client"
 
 import { useState } from "react"
+import { CLOSE_SUB_STATUSES, isCloseSubStatus, type CloseSubStatus } from "@/lib/close-sub-status"
+import { descriptionIsMissing } from "@/lib/task-description"
+import { isDoneColumnTitle } from "@/lib/task-dates"
 import { useDroppable } from "@dnd-kit/core"
 import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
@@ -8,6 +11,7 @@ import { columnDroppableId } from "@/lib/kanban-dnd"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
 import { Trash, Plus, Loader2, GripVertical } from "lucide-react"
 import {
   AlertDialog,
@@ -35,9 +39,16 @@ type KanbanColumnProps = {
   className?: string
   onDeleteColumn?: (columnId: string, columnTitle: string) => void
   onRenameColumn?: (columnId: string, title: string) => Promise<void> | void
-  onAddTask?: (columnId: string, title: string, labels?: string[]) => Promise<void> | void
+  onAddTask?: (
+    columnId: string,
+    title: string,
+    labels?: string[],
+    description?: string,
+    closeSubStatus?: string,
+  ) => Promise<void> | void
   onTaskDelete?: (columnId: string, taskId: string) => Promise<void> | void
   onTaskUpdate?: (task: Task) => void
+  onCloseSubStatus?: (taskId: string, closeSubStatus: CloseSubStatus) => void
 }
 
 export function KanbanColumn({
@@ -54,13 +65,17 @@ export function KanbanColumn({
   onAddTask,
   onTaskDelete,
   onTaskUpdate,
+  onCloseSubStatus,
 }: KanbanColumnProps) {
   const [isEditingTitle, setIsEditingTitle] = useState(false)
   const [columnTitle, setColumnTitle] = useState(column.title)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [newTaskTitle, setNewTaskTitle] = useState("")
+  const [newTaskDescription, setNewTaskDescription] = useState("")
+  const [newCloseSubStatus, setNewCloseSubStatus] = useState("")
   const [newTaskProject, setNewTaskProject] = useState<string | null>(null)
+  const [addError, setAddError] = useState("")
   const [isAddingTask, setIsAddingTask] = useState(false)
 
   const { attributes, listeners, setNodeRef, transform, transition, isDragging: isColumnDragging } = useSortable({
@@ -110,14 +125,38 @@ export function KanbanColumn({
     }
   }
 
+  const resetAddTask = () => {
+    setNewTaskTitle("")
+    setNewTaskDescription("")
+    setNewCloseSubStatus("")
+    setNewTaskProject(null)
+    setAddError("")
+    setIsAddingTask(false)
+  }
+
   const handleAddTask = async () => {
     if (!newTaskTitle.trim()) return
+    if (descriptionIsMissing(newTaskDescription)) {
+      setAddError("Description is required. Add the full ask — the empty placeholder is not a description.")
+      return
+    }
+    if (isDoneColumnTitle(column.title) && !isCloseSubStatus(newCloseSubStatus)) {
+      setAddError("Pick a close status: Closed, No Longer Needed, or Duplicate.")
+      return
+    }
+    setAddError("")
     setIsLoading(true)
     try {
-      await onAddTask?.(column.id, newTaskTitle.trim(), newTaskProject ? [newTaskProject] : [])
-      setNewTaskTitle("")
-      setNewTaskProject(null)
-      setIsAddingTask(false)
+      await onAddTask?.(
+        column.id,
+        newTaskTitle.trim(),
+        newTaskProject ? [newTaskProject] : [],
+        newTaskDescription.trim(),
+        isCloseSubStatus(newCloseSubStatus) ? newCloseSubStatus : undefined,
+      )
+      resetAddTask()
+    } catch (error) {
+      setAddError(error instanceof Error ? error.message : "Failed to add task")
     } finally {
       setIsLoading(false)
     }
@@ -204,6 +243,9 @@ export function KanbanColumn({
                   dragDisabled={readOnly || dragKind === "column"}
                   onDeleted={() => onTaskDelete?.(column.id, task.id)}
                   onUpdated={onTaskUpdate}
+                  onCloseSubStatus={
+                    onCloseSubStatus ? (status) => onCloseSubStatus(task.id, status) : undefined
+                  }
                 />
               ))}
             </SortableContext>
@@ -221,13 +263,43 @@ export function KanbanColumn({
                 autoFocus
                 onKeyDown={(event) => {
                   if (event.key === "Enter") void handleAddTask()
-                  if (event.key === "Escape") {
-                    setNewTaskTitle("")
-                    setNewTaskProject(null)
-                    setIsAddingTask(false)
-                  }
+                  if (event.key === "Escape") resetAddTask()
                 }}
               />
+              <Textarea
+                value={newTaskDescription}
+                onChange={(event) => {
+                  setNewTaskDescription(event.target.value)
+                  if (addError) setAddError("")
+                }}
+                placeholder="Full ask — what should James do?"
+                rows={3}
+                data-testid="new-task-description"
+                className="text-sm bg-white/10 border-white/20 text-white placeholder:text-white/50"
+              />
+              {isDoneColumnTitle(column.title) ? (
+                <label className="block text-xs text-white/70">
+                  Close status
+                  <select
+                    value={newCloseSubStatus}
+                    onChange={(event) => setNewCloseSubStatus(event.target.value)}
+                    data-testid="new-task-close-sub-status"
+                    className="mt-1 w-full rounded-md border border-white/20 bg-white px-2 py-2 text-sm text-[#1f1233]"
+                  >
+                    <option value="">Pick one</option>
+                    {CLOSE_SUB_STATUSES.map((status) => (
+                      <option key={status} value={status}>
+                        {status}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
+              {addError ? (
+                <p className="text-xs text-amber-200" data-testid="new-task-description-error">
+                  {addError}
+                </p>
+              ) : null}
               <div className="flex gap-2">
                 <Button size="sm" onClick={() => void handleAddTask()} disabled={isLoading} className="bg-white/20 hover:bg-white/30 text-white">
                   {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "Add Task"}
@@ -235,10 +307,7 @@ export function KanbanColumn({
                 <Button
                   size="sm"
                   variant="ghost"
-                  onClick={() => {
-                    setNewTaskTitle("")
-                    setIsAddingTask(false)
-                  }}
+                  onClick={resetAddTask}
                   className="text-white/70 hover:text-white hover:bg-white/10"
                 >
                   Cancel

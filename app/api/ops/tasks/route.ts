@@ -11,6 +11,7 @@ export async function POST(request: Request) {
       brief?: unknown
       description?: unknown
       labels?: unknown
+      closeSubStatus?: unknown
     }
     if (typeof body.title !== "string" || !body.title.trim()) {
       return NextResponse.json({ error: "Title is required" }, { status: 400 })
@@ -27,6 +28,9 @@ export async function POST(request: Request) {
     if (body.labels !== undefined && (!Array.isArray(body.labels) || body.labels.some((label) => typeof label !== "string"))) {
       return NextResponse.json({ error: "labels must be a string array" }, { status: 400 })
     }
+    if (body.closeSubStatus !== undefined && body.closeSubStatus !== null && typeof body.closeSubStatus !== "string") {
+      return NextResponse.json({ error: "closeSubStatus must be a string" }, { status: 400 })
+    }
 
     const created = await createOpsTask({
       title: body.title,
@@ -34,6 +38,7 @@ export async function POST(request: Request) {
       brief: body.brief,
       description: body.description,
       labels: body.labels,
+      closeSubStatus: body.closeSubStatus,
     })
     return NextResponse.json(created, { status: created.skipped ? 200 : 201 })
   } catch (error) {

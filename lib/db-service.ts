@@ -204,8 +204,9 @@ export class DBService {
     taskId: string,
     destinationColumnId: string,
     targetPosition: number,
+    options?: { closeSubStatus?: string | null },
   ) {
-    return moveTask(boardId, sourceColumnId, taskId, destinationColumnId, targetPosition)
+    return moveTask(boardId, sourceColumnId, taskId, destinationColumnId, targetPosition, options)
   }
 
   static async shareBoard(boardId: string, userPhone: string) {

@@ -21,7 +21,9 @@ import {
   type OpsBoardDiagnostics,
 } from "@/lib/ops-board"
 import { completedAtForColumnMove, placeTaskBefore } from "@/lib/kanban-dnd"
-import { persistOpsTaskMove } from "@/lib/ops-move-client"
+import { isCloseSubStatus, type CloseSubStatus } from "@/lib/close-sub-status"
+import { persistOpsCloseSubStatus, persistOpsTaskMove } from "@/lib/ops-move-client"
+import { isDoneColumnTitle } from "@/lib/task-dates"
 import { filterTasksByProject, type ProjectFilterValue } from "@/lib/projects"
 import { Button } from "@/components/ui/button"
 import { ProjectFilter, ProjectLegend } from "@/components/project-chip"
@@ -202,17 +204,29 @@ export default function BoardPage() {
     destinationColumnId: string,
     beforeTaskId: string | null,
     sourceColumnId: string,
+    closeSubStatus?: CloseSubStatus | null,
   ) => {
     const previous = tasks
-    const completedAt = completedAtForColumnMove({
-      fromTitle: columns.find((column) => column.id === sourceColumnId)?.title,
-      toTitle: columns.find((column) => column.id === destinationColumnId)?.title,
-    })
+    const fromTitle = columns.find((column) => column.id === sourceColumnId)?.title
+    const toTitle = columns.find((column) => column.id === destinationColumnId)?.title
+    const enteringDone = !isDoneColumnTitle(fromTitle) && isDoneColumnTitle(toTitle)
+    const leavingDone = isDoneColumnTitle(fromTitle) && !isDoneColumnTitle(toTitle)
+    if (enteringDone && !isCloseSubStatus(closeSubStatus)) {
+      toast({
+        title: "Close status required",
+        description: "Pick Closed, No Longer Needed, or Duplicate before moving a card to Done.",
+        variant: "destructive",
+      })
+      return
+    }
+    const completedAt = completedAtForColumnMove({ fromTitle, toTitle })
+    const nextClose = enteringDone ? closeSubStatus : leavingDone ? null : undefined
     const next = placeTaskBefore(tasks, {
       taskId,
       destColumnId: destinationColumnId,
       beforeTaskId,
       completedAt,
+      closeSubStatus: nextClose,
     })
     if (next === previous) return
 
@@ -230,9 +244,12 @@ export default function BoardPage() {
           destColumnId: destinationColumnId,
           destIndex: index,
           beforeTaskId,
+          closeSubStatus: enteringDone ? closeSubStatus : undefined,
         })
       } else {
-        await DBService.moveTask(resolvedBoardId, sourceColumnId, taskId, destinationColumnId, index)
+        await DBService.moveTask(resolvedBoardId, sourceColumnId, taskId, destinationColumnId, index, {
+          closeSubStatus: enteringDone ? closeSubStatus : undefined,
+        })
       }
     } catch (error) {
       console.error("Error moving task:", error)
@@ -244,6 +261,43 @@ export default function BoardPage() {
       })
     } finally {
       pendingMovesRef.current.delete(taskId)
+    }
+  }
+
+  const handleCloseSubStatus = async (taskId: string, closeSubStatus: CloseSubStatus) => {
+    const task = tasks.find((item) => item.id === taskId)
+    if (!task?.columnId) return
+    const column = columns.find((item) => item.id === task.columnId)
+    const done = columns.find((item) => isDoneColumnTitle(item.title))
+    if (!done) {
+      toast({
+        title: "Done column missing",
+        description: "Add a Done column before closing a task.",
+        variant: "destructive",
+      })
+      return
+    }
+    if (!isDoneColumnTitle(column?.title)) {
+      await handleTaskMove(taskId, done.id, null, task.columnId, closeSubStatus)
+      return
+    }
+
+    const previous = tasks
+    setTasks((current) => current.map((item) => (item.id === taskId ? { ...item, closeSubStatus } : item)))
+    try {
+      if (isOpsBoardRoute(boardId, board?.slug)) {
+        await persistOpsCloseSubStatus(taskId, closeSubStatus)
+      } else {
+        const result = await DBService.updateTask(resolvedBoardId, task.columnId, taskId, { closeSubStatus })
+        if (!result.success) throw new Error(result.error || "Failed to update close status")
+      }
+    } catch (error) {
+      setTasks(previous)
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to update close status.",
+        variant: "destructive",
+      })
     }
   }
 
@@ -320,10 +374,13 @@ export default function BoardPage() {
           onColumnUpdate={(columnId, title) => void handleColumnUpdate(columnId, title)}
           onColumnDelete={(columnId) => void handleColumnDelete(columnId)}
           onColumnMove={(columnId, order) => void handleColumnMove(columnId, order)}
-          onTaskAdd={(taskData, columnId) => void handleTaskAdd(taskData, columnId)}
+          onTaskAdd={(taskData, columnId) => handleTaskAdd(taskData, columnId)}
           onTaskUpdate={(task) => void handleTaskUpdate(task)}
           onTaskDelete={(taskId, columnId) => void handleTaskDelete(taskId, columnId)}
-          onTaskMove={(taskId, dest, pos, src) => void handleTaskMove(taskId, dest, pos, src)}
+          onTaskMove={(taskId, dest, pos, src, closeSubStatus) =>
+            void handleTaskMove(taskId, dest, pos, src, closeSubStatus)
+          }
+          onCloseSubStatus={(taskId, closeSubStatus) => void handleCloseSubStatus(taskId, closeSubStatus)}
         />
       </div>
     </div>

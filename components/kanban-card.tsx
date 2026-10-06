@@ -29,6 +29,7 @@ import { ProjectChip } from "./project-chip"
 import { EditorErrorBoundary } from "./editor-error-boundary"
 import { TaskDetailModal } from "./task-detail-modal"
 import { TaskEditModal } from "./task-edit-modal"
+import type { CloseSubStatus } from "@/lib/close-sub-status"
 import { StickerLayer } from "./sticker-layer"
 import { TaskShortIdBadge } from "./task-short-id"
 import type { StickerItem } from "./sticker-panel"
@@ -46,6 +47,7 @@ type KanbanCardProps = {
   onStickerRemove?: (stickerId: string) => void
   onDeleted?: () => void
   onUpdated?: (task: Task) => void
+  onCloseSubStatus?: (closeSubStatus: CloseSubStatus) => void
 }
 
 export function KanbanCard({
@@ -61,6 +63,7 @@ export function KanbanCard({
   onStickerRemove,
   onDeleted,
   onUpdated,
+  onCloseSubStatus,
 }: KanbanCardProps) {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
@@ -273,6 +276,14 @@ export function KanbanCard({
                     showCompleted={showCompleted}
                     variant="card"
                   />
+                  {task.closeSubStatus ? (
+                    <p
+                      className="text-[11px] uppercase tracking-[0.14em] text-white/70"
+                      data-testid="close-sub-status"
+                    >
+                      {task.closeSubStatus}
+                    </p>
+                  ) : null}
                 </div>
               </div>
             </div>
@@ -347,6 +358,7 @@ export function KanbanCard({
         task={task}
         columnTitle={columnTitle}
         onEdit={() => setShowEditModal(true)}
+        onPickCloseSubStatus={onCloseSubStatus}
       />
 
       <EditorErrorBoundary>

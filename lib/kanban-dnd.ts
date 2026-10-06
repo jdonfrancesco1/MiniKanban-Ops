@@ -7,6 +7,7 @@ export type PlaceableTask = {
   columnId?: string
   order?: number
   completedAt?: string | null
+  closeSubStatus?: string | null
 }
 
 export type TaskDropTarget = {
@@ -84,6 +85,7 @@ export function placeTask<T extends PlaceableTask>(
     destColumnId: string
     destIndex: number
     completedAt?: string | null
+    closeSubStatus?: string | null
   },
 ): T[] {
   const moving = tasks.find((task) => task.id === input.taskId)
@@ -104,6 +106,7 @@ export function placeTask<T extends PlaceableTask>(
     columnId: destColumnId,
     order: destIndex,
     ...(input.completedAt !== undefined ? { completedAt: input.completedAt } : {}),
+    ...(input.closeSubStatus !== undefined ? { closeSubStatus: input.closeSubStatus } : {}),
   }
 
   const grouped = new Map<string, T[]>()
@@ -137,6 +140,7 @@ export function placeTaskBefore<T extends PlaceableTask>(
     destColumnId: string
     beforeTaskId: string | null
     completedAt?: string | null
+    closeSubStatus?: string | null
   },
 ): T[] {
   const dest = sortByOrder(
@@ -152,6 +156,7 @@ export function placeTaskBefore<T extends PlaceableTask>(
     destColumnId: input.destColumnId,
     destIndex,
     completedAt: input.completedAt,
+    closeSubStatus: input.closeSubStatus,
   })
 }
 

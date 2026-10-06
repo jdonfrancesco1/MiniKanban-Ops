@@ -18,6 +18,7 @@ import { useToast } from "@/hooks/use-toast"
 import { updateTask, type Task } from "@/lib/db-service"
 import { Badge } from "@/components/ui/badge"
 import { descriptionForEditor, isLocalPreviewBoard } from "@/lib/card-copy"
+import { descriptionIsMissing } from "@/lib/task-description"
 import { isDoneColumnTitle } from "@/lib/task-dates"
 import { matchOpsProject, upsertProjectLabel } from "@/lib/projects"
 import { ProjectPicker } from "@/components/project-chip"
@@ -56,6 +57,15 @@ export function TaskEditModal({ open, onOpenChange, task, boardId, columnId, col
       toast({
         title: "Error",
         description: "Task title cannot be empty",
+        variant: "destructive",
+      })
+      return
+    }
+
+    if (descriptionIsMissing(description)) {
+      toast({
+        title: "Description required",
+        description: "Add the full ask — the empty placeholder is not a description.",
         variant: "destructive",
       })
       return

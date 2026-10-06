@@ -83,7 +83,9 @@ function mockPort(seed: OpsApiTask[] = [task()]): OpsToolPort & { tasks: OpsApiT
       const column = columns.find((item) => item.title === input.columnTitle)
       if (!column) throw new Error("Column not found")
       found.columnId = column.id
-      found.completedAt = column.title === "Done" ? "2026-09-15T16:00:00.000Z" : null
+      const done = column.title === "Done"
+      found.completedAt = done ? found.completedAt || "2026-09-15T16:00:00.000Z" : null
+      found.closeSubStatus = done ? input.closeSubStatus ?? found.closeSubStatus ?? null : null
       return { task: found }
     },
     async updateTask(taskId, input) {
@@ -93,6 +95,7 @@ function mockPort(seed: OpsApiTask[] = [task()]): OpsToolPort & { tasks: OpsApiT
       if (input.brief !== undefined) found.brief = input.brief
       if (input.description !== undefined) found.description = input.description
       if (input.labels !== undefined) found.labels = input.labels
+      if (input.closeSubStatus !== undefined) found.closeSubStatus = input.closeSubStatus
       return { task: found }
     },
     async archiveTask(taskId) {
@@ -139,18 +142,31 @@ describe("MCP tool handlers", () => {
     assert.deepEqual(columns[0].tasks[0].labels, ["MiniKanban"])
     assert.equal(columns[0].tasks[0].createdAt, "2026-09-14T16:00:00.000Z")
     assert.equal(columns[0].tasks[0].completedAt, null)
+    assert.equal(columns[0].tasks[0].closeSubStatus, null)
     assert.equal(columns[0].tasks[0].shortId, "MKB-T1000000")
   })
 
   it("insert_task skips when an active title already exists", async () => {
     const port = mockPort()
-    const skipped = parse(await runMcpTool("insert_task", { title: "ship mcp", columnTitle: "Need you" }, port))
+    const skipped = parse(
+      await runMcpTool(
+        "insert_task",
+        { title: "ship mcp", columnTitle: "Need you", description: "Already asked" },
+        port,
+      ),
+    )
     assert.equal(skipped.skipped, true)
     assert.equal(port.tasks.length, 1)
     const created = parse(
       await runMcpTool(
         "insert_task",
-        { title: "New ask", columnTitle: "I'm on", brief: "Do it", labels: ["Giant"] },
+        {
+          title: "New ask",
+          columnTitle: "I'm on",
+          brief: "Do it",
+          description: "Ship the remote board and write down the ask.",
+          labels: ["Giant"],
+        },
         port,
       ),
     )
@@ -163,18 +179,28 @@ describe("MCP tool handlers", () => {
     const port = mockPort([
       task({ id: "7e3a1234-5678-4abc-8def-0123456789ab", title: "Named card", columnId: "need" }),
     ])
-    const moved = parse(await runMcpTool("move_task", { id: "MKB-7E3A", column: "Done" }, port))
+    const moved = parse(
+      await runMcpTool("move_task", { id: "MKB-7E3A", column: "Done", closeSubStatus: "Duplicate" }, port),
+    )
     assert.equal((moved.task as { column: string; shortId: string }).column, "Done")
     assert.equal((moved.task as { shortId: string }).shortId, "MKB-7E3A1234")
+    assert.equal((moved.task as { closeSubStatus: string }).closeSubStatus, "Duplicate")
   })
 
   it("move_task and done_task resolve by title and stamp Done", async () => {
     const port = mockPort()
     const moved = parse(await runMcpTool("move_task", { title: "Ship MCP", column: "Waiting" }, port))
     assert.equal((moved.task as { column: string }).column, "Waiting")
-    const done = parse(await runMcpTool("done_task", { title: "Ship MCP" }, port))
+    const missingStatus = await runMcpTool("done_task", { title: "Ship MCP" }, port)
+    assert.equal(missingStatus.isError, true)
+    assert.match(missingStatus.content[0].text, /closeSubStatus is required/)
+    const done = parse(await runMcpTool("done_task", { title: "Ship MCP", closeSubStatus: "Closed" }, port))
     assert.equal((done.task as { column: string; completedAt: string }).column, "Done")
     assert.equal((done.task as { completedAt: string }).completedAt, "2026-09-15T16:00:00.000Z")
+    assert.equal((done.task as { closeSubStatus: string }).closeSubStatus, "Closed")
+    const invalid = await runMcpTool("move_task", { title: "Ship MCP", column: "Done", closeSubStatus: "Archived" }, port)
+    assert.equal(invalid.isError, true)
+    assert.match(invalid.content[0].text, /must be one of: Closed, No Longer Needed, Duplicate/)
   })
 
   it("archive_task soft-removes the active card", async () => {
@@ -197,6 +223,29 @@ describe("MCP tool handlers", () => {
     assert.equal(taskPayload.title, "Ship remote MCP")
     assert.equal(taskPayload.brief, "Docs")
     assert.deepEqual(taskPayload.labels, ["Giant"])
+  })
+
+  it("rejects empty and placeholder descriptions on create, and accepts a filled update", async () => {
+    const port = mockPort()
+    const missing = await runMcpTool("insert_task", { title: "No ask" }, port)
+    assert.equal(missing.isError, true)
+    assert.match(missing.content[0].text, /Description is required/)
+    const placeholder = await runMcpTool(
+      "insert_task",
+      { title: "Placeholder", description: "No description yet. Edit the card to add the full ask." },
+      port,
+    )
+    assert.equal(placeholder.isError, true)
+    assert.equal(port.tasks.length, 1)
+
+    const cleared = await runMcpTool("update_task", { title: "Ship MCP", description: "   " }, port)
+    assert.equal(cleared.isError, true)
+    assert.equal(port.tasks[0].description, "Full ask")
+
+    const filled = parse(
+      await runMcpTool("update_task", { id: "t1", description: "The real ask James should do." }, port),
+    )
+    assert.equal((filled.task as { description: string }).description, "The real ask James should do.")
   })
 
   it("returns a tool error for unknown tools and missing fields", async () => {

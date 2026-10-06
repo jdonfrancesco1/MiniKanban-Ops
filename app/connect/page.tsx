@@ -105,8 +105,10 @@ export default function ConnectPage() {
                 {MCP_TOOL_NAMES.join(", ")}.
               </p>
               <p className="text-white/50 text-sm">
-                <code>insert_task</code> is idempotent: an active card with the same title is reused.{" "}
-                <code>done_task</code> moves to Done and stamps <code>completed_at</code>.
+                <code>insert_task</code> requires a real description and is idempotent: an active card with the same title is reused.{" "}
+                <code>done_task</code> moves to Done, requires <code>closeSubStatus</code> (
+                <code>Closed</code>, <code>No Longer Needed</code>, or <code>Duplicate</code>
+                ), and stamps <code>completed_at</code>.
               </p>
             </div>
 

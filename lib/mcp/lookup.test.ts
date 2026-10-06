@@ -78,6 +78,7 @@ describe("ops MCP lookup", () => {
     assert.deepEqual(presented.columns[0].tasks[0].labels, ["MiniKanban"])
     assert.equal(presented.columns[0].tasks[0].createdAt, "2026-09-14T16:00:00.000Z")
     assert.equal(presented.columns[0].tasks[0].completedAt, null)
+    assert.equal(presented.columns[0].tasks[0].closeSubStatus, null)
     assert.equal(presented.columns[0].tasks[0].shortId, "MKB-T1000000")
   })
 })
