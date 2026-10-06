@@ -221,6 +221,10 @@ AddMcpServer
 
 Point Orca AddMcpServer at that workers.dev URL and keep `OPS_BOARD_SECRET` in the connector env. No SSH, no `psql`, no secret in tool args.
 
+### Cursor plugin
+
+Installable package: [`plugins/minikanban-ops`](plugins/minikanban-ops/README.md). `mcp.json` points at the workers.dev `/mcp` URL with `Authorization: Bearer ${OPS_BOARD_SECRET}`. The secret is a plugin variable set in **Plugins → Configure**, not a committed value. Manual **Settings → MCP** and Grok Bot `AddMcpServer` steps in that README match [`/connect`](https://minikanban-ops.productvision.workers.dev/connect). Marketplace submit is a manual step after review (`plugins/minikanban-ops/REVIEW.md`).
+
 Local: `http://localhost:3000/mcp` with the same Bearer header.
 
 Card face: project chip · decoded title · brief · muted `Created Sep 14`. Done cards also show `Completed Sep 15` and the close sub-status (`Closed`, `No Longer Needed`, or `Duplicate`) when one is set. Dates use America/New_York short format (detail/edit: `Sep 15, 2026`). Click opens the full description and close status. Dragging a card into Done, or Mark done on the detail view, asks for that close status before the move is saved. Columns scroll so card bottoms are not clipped. Project colors: Giant blue, Paylyte orange, MiniKanban purple/teal, Hangar 18 green, Off Replit slate, Security red, Marketing magenta, Jimbo gold.

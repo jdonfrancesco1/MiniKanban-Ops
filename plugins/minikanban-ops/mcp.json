@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "minikanban-ops": {
+      "type": "http",
+      "url": "https://minikanban-ops.productvision.workers.dev/mcp",
+      "headers": {
+        "Authorization": "Bearer ${OPS_BOARD_SECRET}"
+      }
+    }
+  }
+}
