@@ -49,3 +49,12 @@ Each row is a card on the board: short id (`MKB-` plus eight hex characters), ti
 - `done_task`, and `move_task` into **Done**, require `closeSubStatus`: `Closed`, `No Longer Needed`, or `Duplicate`. That stamps `completedAt`. Leaving Done clears `closeSubStatus`.
 - `archive_task` soft-archives. It does not set a close sub-status.
 - An `insert_task` whose title already exists on an active card is skipped and does not overwrite that card.
+
+## 5. Price
+
+Two facts. Do not mix them.
+
+1. **Cursor Marketplace listing.** The official Cursor Marketplace requires plugins to be free to end users on that store. This listing has no price. Installing it from that store does not bill the user and does not start a subscription.
+2. **Product intent.** The MiniKanban product and board offering, if sold, is a **one-time purchase**, not a subscription. Commercial checkout sits outside that free listing (for example our own checkout). When copy names a price, call it a one-time purchase. Do not describe monthly, yearly, or other recurring billing.
+
+This package does not set a dollar amount.

@@ -4,13 +4,13 @@
     "name": "MiniKanban Ops"
   },
   "metadata": {
-    "description": "MiniKanban Ops board for Cursor and Grok Bot. The inline Task List summarizes MKB cards from the live board."
+    "description": "MiniKanban Ops board for Cursor and Grok Bot. Marketplace install is free. A commercial offering, if sold, is a one-time purchase, not a subscription."
   },
   "plugins": [
     {
       "name": "minikanban-ops",
       "source": "./plugins/minikanban-ops",
-      "description": "Connect the live MiniKanban Ops MCP. Grok Bot's inline Task List summarizes MKB board columns."
+      "description": "Connect the live MiniKanban Ops MCP. Marketplace install is free. A commercial board offering, if sold, is a one-time purchase, not a subscription. Grok Bot's inline Task List summarizes MKB columns."
     }
   ]
 }

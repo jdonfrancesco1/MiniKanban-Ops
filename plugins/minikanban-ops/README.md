@@ -1,6 +1,8 @@
 # MiniKanban Ops
 
-Free Cursor plugin that connects an agent harness to the live MiniKanban Ops board.
+Cursor plugin that connects an agent harness to the live MiniKanban Ops board.
+
+The Cursor Marketplace listing is free to install. Publisher terms for that store require plugins to be free to end users there. The MiniKanban product and board offering, if sold, is a one-time purchase outside that listing, not a subscription. This package does not set a dollar amount. See [docs/grok-bot-task-list.md](docs/grok-bot-task-list.md).
 
 The board stays at [minikanban-ops.productvision.workers.dev](https://minikanban-ops.productvision.workers.dev). This package only wires the remote [Streamable HTTP MCP](https://minikanban-ops.productvision.workers.dev/mcp). It does not contain `OPS_BOARD_SECRET`.
 

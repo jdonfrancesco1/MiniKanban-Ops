@@ -83,6 +83,15 @@ describe("minikanban-ops cursor plugin package", () => {
     }
     const pluginReadme = readFileSync(path.join(pluginRoot, "README.md"), "utf8")
     assert.match(pluginReadme, /docs\/grok-bot-task-list\.md/)
+    for (const phrase of ["one-time purchase", "free to end users", "not a subscription"]) {
+      assert.ok(guide.includes(phrase), phrase)
+    }
+    assert.doesNotMatch(guide, /\$\d/)
+    const manifest = readFileSync(path.join(pluginRoot, ".cursor-plugin/plugin.json"), "utf8")
+    const marketplace = readFileSync(path.join(repoRoot, ".cursor-plugin/marketplace.json"), "utf8")
+    assert.match(manifest, /one-time purchase/)
+    assert.match(marketplace, /one-time purchase/)
+    assert.doesNotMatch(`${manifest}\n${marketplace}\n${pluginReadme}`, /\$\d/)
     assert.equal(statSync(path.join(pluginRoot, "assets/logo.svg")).isFile(), true)
 
     const bundled = walk(pluginRoot)

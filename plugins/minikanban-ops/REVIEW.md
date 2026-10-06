@@ -6,7 +6,12 @@ Submit the public repo at [cursor.com/marketplace/publish](https://cursor.com/ma
 
 `https://github.com/jdonfrancesco1/MiniKanban-Ops`
 
-The listing is the **minikanban-ops** plugin under `plugins/minikanban-ops`, indexed by `.cursor-plugin/marketplace.json`. It is free. There is no price field to set.
+The listing is the **minikanban-ops** plugin under `plugins/minikanban-ops`, indexed by `.cursor-plugin/marketplace.json`.
+
+Price, two facts:
+
+1. The Cursor Marketplace listing is free to install. That store requires plugins to be free to end users. Do not enter a price on the publish form.
+2. The product and board offering, if sold, is a one-time purchase outside that listing, not a subscription. This package does not set a dollar amount. Do not describe recurring billing.
 
 ## Package
 
