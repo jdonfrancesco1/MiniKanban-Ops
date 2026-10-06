@@ -1,6 +1,8 @@
 # MiniKanban Ops
 
-Free Cursor plugin that connects an agent harness to the live MiniKanban Ops board.
+Cursor plugin that connects an agent harness to the live MiniKanban Ops board.
+
+The Cursor Marketplace listing is free to install. Publisher terms for that store require plugins to be free to end users there. The MiniKanban product and board offering, if sold, is a one-time purchase outside that listing, not a subscription. This package does not set a dollar amount. See [docs/grok-bot-task-list.md](docs/grok-bot-task-list.md).
 
 The board stays at [minikanban-ops.productvision.workers.dev](https://minikanban-ops.productvision.workers.dev). This package only wires the remote [Streamable HTTP MCP](https://minikanban-ops.productvision.workers.dev/mcp). It does not contain `OPS_BOARD_SECRET`.
 
@@ -69,9 +71,20 @@ Or merge this into the user or project `mcp.json`. Prefer the client’s env int
 }
 ```
 
+## Grok Bot task list
+
+Grok Bot uses this board as the source of truth for ops cards. The inline **Task List** in chat summarizes the user's MKB (MiniKanban) tasks from `list_board`, grouped by **Need you**, **I'm on**, and **Done** (include **Waiting** when that column has cards).
+
+Guide: [docs/grok-bot-task-list.md](docs/grok-bot-task-list.md).
+
+1. Connect the MCP at `https://minikanban-ops.productvision.workers.dev/mcp`. Board: `https://minikanban-ops.productvision.workers.dev/boards/ops`.
+2. Read and write cards only through this MCP. Do not keep a second task list.
+3. The inline Task List is a summary of those MKB board columns, not a separate tracker.
+4. `insert_task` requires a real `description`. Done requires `closeSubStatus`: `Closed`, `No Longer Needed`, or `Duplicate`.
+
 ## Grok Bot AddMcpServer
 
-Point AddMcpServer at the workers.dev URL. Keep `OPS_BOARD_SECRET` on the connector.
+Point AddMcpServer at the workers.dev URL. Keep `OPS_BOARD_SECRET` on the connector. Same steps as the [task list guide](docs/grok-bot-task-list.md).
 
 ```
 AddMcpServer

@@ -99,6 +99,26 @@ export default function ConnectPage() {
             </div>
 
             <div className="rounded-lg border border-white/10 bg-[#2a1b3e] p-6 space-y-3">
+              <h2 className="text-xl font-semibold text-pink-400">Task List</h2>
+              <p className="text-white/70">
+                The Ops board is the source of truth for ops cards. In Grok Bot, the inline Task
+                List summarizes the user&apos;s MKB tasks from this board: Need you, I&apos;m on, and
+                Done. Include Waiting when that column has cards.
+              </p>
+              <ul className="list-disc pl-5 space-y-2 text-white/70">
+                <li>
+                  Board:{" "}
+                  <code className="text-pink-300">{`${MCP_AUTOSCALE_HOST}/boards/ops`}</code>
+                </li>
+                <li>
+                  Create requires a real description. Done requires{" "}
+                  <code className="text-pink-300">closeSubStatus</code> (Closed, No Longer Needed,
+                  or Duplicate).
+                </li>
+              </ul>
+            </div>
+
+            <div className="rounded-lg border border-white/10 bg-[#2a1b3e] p-6 space-y-3">
               <h2 className="text-xl font-semibold text-pink-400">Tools</h2>
               <p className="text-white/70">
                 Same Neon / Helium board as <code className="text-pink-300">/api/ops/*</code>:{" "}

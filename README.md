@@ -223,7 +223,7 @@ Point Orca AddMcpServer at that workers.dev URL and keep `OPS_BOARD_SECRET` in t
 
 ### Cursor plugin
 
-Installable package: [`plugins/minikanban-ops`](plugins/minikanban-ops/README.md). `mcp.json` points at the workers.dev `/mcp` URL with `Authorization: Bearer ${OPS_BOARD_SECRET}`. The secret is a plugin variable set in **Plugins → Configure**, not a committed value. Manual **Settings → MCP** and Grok Bot `AddMcpServer` steps in that README match [`/connect`](https://minikanban-ops.productvision.workers.dev/connect). Marketplace submit is a manual step after review (`plugins/minikanban-ops/REVIEW.md`).
+Installable package: [`plugins/minikanban-ops`](plugins/minikanban-ops/README.md). `mcp.json` points at the workers.dev `/mcp` URL with `Authorization: Bearer ${OPS_BOARD_SECRET}`. The secret is a plugin variable set in **Plugins → Configure**, not a committed value. Manual **Settings → MCP** and Grok Bot `AddMcpServer` steps in that README match [`/connect`](https://minikanban-ops.productvision.workers.dev/connect). Grok Bot uses the board as the task list: the inline Task List summarizes MKB columns ([guide](plugins/minikanban-ops/docs/grok-bot-task-list.md)). The Cursor Marketplace listing is free to install. A commercial board offering, if sold, is a one-time purchase outside that listing, not a subscription. No dollar amount is set in the plugin package. Marketplace submit is a manual step after review (`plugins/minikanban-ops/REVIEW.md`).
 
 Local: `http://localhost:3000/mcp` with the same Bearer header.
 

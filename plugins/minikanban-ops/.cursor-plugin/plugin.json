@@ -1,11 +1,11 @@
 {
   "name": "minikanban-ops",
   "displayName": "MiniKanban Ops",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "minClientVersions": {
     "cursor": "3.13.0"
   },
-  "description": "List, add, move, complete, and archive cards on the MiniKanban Ops board through the live Streamable HTTP MCP.",
+  "description": "Ops board for Cursor and Grok Bot. The inline Task List summarizes MKB cards from the live MCP. Cursor Marketplace install is free. A commercial offering, if sold, is a one-time purchase outside that listing, not a subscription.",
   "author": {
     "name": "MiniKanban Ops"
   },

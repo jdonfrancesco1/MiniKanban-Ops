@@ -1,12 +1,18 @@
 ---
 name: minikanban-ops-board
 description: >
-  Use the MiniKanban Ops board through the minikanban-ops MCP.
-  Use when listing cards, adding a task, moving a card, marking work done,
-  archiving a card, closing a card with a sub-status, or updating title, brief, description, or labels.
+  Use the MiniKanban Ops board as the source of truth for ops cards.
+  Use when Grok Bot should show an inline Task List of the user's MKB tasks,
+  or when listing, adding, moving, completing, archiving, or updating cards.
 ---
 
 # MiniKanban Ops board
+
+MiniKanban (MKB) is the source of truth for ops cards. Do not keep a second task list. Full harness notes: [Grok Bot task list](../../docs/grok-bot-task-list.md).
+
+When showing current ops work in Grok Bot, render an inline **Task List**. It summarizes the user's MKB tasks from `list_board`, grouped as **Need you**, **I'm on**, and **Done**. Include **Waiting** when that column has cards. Each row is a board card (short id, title, column). Do not invent cards.
+
+Connect at `https://minikanban-ops.productvision.workers.dev/mcp`. The board is `https://minikanban-ops.productvision.workers.dev/boards/ops`. The connector sends `Authorization: Bearer` with `OPS_BOARD_SECRET`. Never pass that secret as a tool argument.
 
 The board slug is `ops`. Columns, in order:
 

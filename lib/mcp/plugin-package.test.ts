@@ -64,6 +64,34 @@ describe("minikanban-ops cursor plugin package", () => {
       assert.ok(skill.includes(column), column)
     }
     assert.match(skill, /^---\r?\nname: minikanban-ops-board\r?\n/)
+    assert.match(skill, /inline \*\*Task List\*\*/)
+    assert.match(skill, /docs\/grok-bot-task-list\.md/)
+    const guide = readFileSync(path.join(pluginRoot, "docs/grok-bot-task-list.md"), "utf8")
+    for (const phrase of [
+      "https://minikanban-ops.productvision.workers.dev/mcp",
+      "https://minikanban-ops.productvision.workers.dev/boards/ops",
+      "source of truth",
+      "Task List",
+      "Need you",
+      "I'm on",
+      "Done",
+      "Waiting",
+      "closeSubStatus",
+      "description",
+    ]) {
+      assert.ok(guide.includes(phrase), phrase)
+    }
+    const pluginReadme = readFileSync(path.join(pluginRoot, "README.md"), "utf8")
+    assert.match(pluginReadme, /docs\/grok-bot-task-list\.md/)
+    for (const phrase of ["one-time purchase", "free to end users", "not a subscription"]) {
+      assert.ok(guide.includes(phrase), phrase)
+    }
+    assert.doesNotMatch(guide, /\$\d/)
+    const manifest = readFileSync(path.join(pluginRoot, ".cursor-plugin/plugin.json"), "utf8")
+    const marketplace = readFileSync(path.join(repoRoot, ".cursor-plugin/marketplace.json"), "utf8")
+    assert.match(manifest, /one-time purchase/)
+    assert.match(marketplace, /one-time purchase/)
+    assert.doesNotMatch(`${manifest}\n${marketplace}\n${pluginReadme}`, /\$\d/)
     assert.equal(statSync(path.join(pluginRoot, "assets/logo.svg")).isFile(), true)
 
     const bundled = walk(pluginRoot)
