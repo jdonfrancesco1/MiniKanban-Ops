@@ -402,7 +402,7 @@ export async function archiveOpsTask(taskId: string) {
 
   const result = await deleteTask(board.id, existing.columnId, taskId)
   if (!result.success || !result.removedTask) {
-    throw new Error(result.error || "Task not found")
+    throw new Error("Task not found")
   }
   return { task: serializeOpsTask(result.removedTask) }
 }

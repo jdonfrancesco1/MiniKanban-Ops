@@ -4,15 +4,22 @@
  * lib/db/index.ts is the only pg Client (ops actions, fleet self-heal, MCP
  * live port). attachTenantRls wraps that client. There is no second pool.
  *
- * Node hermetic path (OPS_TENANT_RLS_SESSION=0): every statement runs inside
- * BEGIN + set_config(..., is_local=true) + COMMIT.
+ * Node (including when OPS_TENANT_RLS_SESSION=1): every statement runs inside
+ * BEGIN + set_config(..., is_local=true) + COMMIT. The Node Client is a
+ * long-lived singleton, so a session GUC would survive the request.
  *
- * Workers / OpenNext default: node-pg on cloudflare:sockets breaks if
- * client.query is an async function (the driver must enqueue synchronously).
- * Session mode keeps query() synchronous and arms set_config(..., false)
- * via armVerifiedTenantRls() once the verified tenant is known
+ * Workers / OpenNext, unless OPS_TENANT_RLS_SESSION=0: node-pg on
+ * cloudflare:sockets breaks if client.query is an async function (the
+ * driver must enqueue synchronously). Session mode keeps query() a
+ * synchronous passthrough and arms set_config(..., false) via
+ * armVerifiedTenantRls() once the verified tenant is known
  * (requireActorTenant / runAsVerifiedTenant). The Worker Client is
- * per-request, so the setting does not leak across requests.
+ * per-request, so the setting dies with that socket.
+ *
+ * The arm callback is stored on the request's db (WeakMap) and selected
+ * with AsyncLocalStorage. There is no process-wide current arm: two
+ * requests in one isolate cannot arm each other's client. An unarmed
+ * query leaves app.tenant_id unset, and FORCE matches no rows.
  *
  * Value comes from the resolver registered in lib/auth/session.ts
  * (session cookie / bearer only). Never from ?tenant=, JSON tenant_id, or
@@ -31,6 +38,10 @@ export async function runAsVerifiedTenant<T>(tenantId: string, fn: () => Promise
     throw new Error("Refusing to set app.tenant_id from an unverified tenant key")
   }
   return scopedTenant.run(tenantId, () => runInRequestScope(async () => {
+    // Open this request's client before arming. On Workers the session GUC
+    // has to land on that client; arming a module-global pointer can hit a
+    // peer request's client instead.
+    ensureRequestDb?.()
     await armVerifiedTenantRls(tenantId)
     return await fn()
   }))
@@ -71,22 +82,42 @@ type ArmFn = (tenantId: string | null) => Promise<void>
 const armsByClient = new WeakMap<QueryClient, ArmFn>()
 const armsByDb = new WeakMap<object, ArmFn>()
 
+/**
+ * Which db this async context may arm. getDb() enters it for the rest of
+ * the request. runWithRequestDb isolates tests and nested work. Never a
+ * module-global arm: that let one request set_config on another request's
+ * client.
+ */
+const requestDb = new AsyncLocalStorage<object>()
+
+let ensureRequestDb: (() => void) | null = null
+
+/** index.ts registers getDb() so runAsVerifiedTenant can open the request client before arming. */
+export function setRequestDbEnsurer(next: () => void) {
+  ensureRequestDb = next
+}
+
 /** Bind drizzle db handle → arm fn so requireActorTenant can set_config once. */
 export function bindTenantRlsArm(db: object, arm: ArmFn) {
   armsByDb.set(db, arm)
 }
 
-export async function armVerifiedTenantRls(tenantId: string | null) {
-  // Prefer ALS-bound request db via module hook set from getDb path.
-  const arm = currentArm
-  if (!arm) return
-  await arm(tenantId)
+/** Bind the current async context to this request's db. Same db on re-entry. */
+export function bindRequestDb(db: object) {
+  requestDb.enterWith(db)
 }
 
-let currentArm: ArmFn | null = null
+/** Run fn with db as the only client this context is allowed to arm. */
+export function runWithRequestDb<T>(db: object, fn: () => Promise<T>): Promise<T> {
+  return requestDb.run(db, fn)
+}
 
-export function setCurrentTenantRlsArm(arm: ArmFn | null) {
-  currentArm = arm
+export async function armVerifiedTenantRls(tenantId: string | null) {
+  const db = requestDb.getStore()
+  if (!db) return
+  const arm = armsByDb.get(db)
+  if (!arm) return
+  await arm(tenantId)
 }
 
 function textOf(config: unknown) {
@@ -131,15 +162,25 @@ function isSchemaDdl(command: string) {
   return /^(alter|create|drop|do|comment|grant|revoke|truncate|vacuum|analyze|reindex|cluster)\b/.test(command)
 }
 
-function preferSessionTenantSetting() {
-  // Default ON for Workers safety. Hermetic Node tests set = "0".
-  if (process.env.OPS_TENANT_RLS_SESSION === "0") return false
-  return true
+export function isWorkersRuntime() {
+  return typeof navigator !== "undefined" && navigator.userAgent === "Cloudflare-Workers"
 }
 
-export function attachTenantRls(client: QueryClient) {
+/**
+ * Session set_config(..., false) only on the Workers per-request client.
+ * Node keeps BEGIN + set_config(..., true) even when OPS_TENANT_RLS_SESSION=1,
+ * because getNodeDb() reuses one Client across requests. OPS_TENANT_RLS_SESSION=0
+ * forces that transaction path on Workers too (hermetic tests; blanks SELECTs
+ * on live node-pg + cloudflare:sockets, so production Workers leave it unset or 1).
+ */
+export function workersSessionTenantRls() {
+  if (!isWorkersRuntime()) return false
+  return process.env.OPS_TENANT_RLS_SESSION !== "0"
+}
+
+export function attachTenantRls(client: QueryClient, options?: { session?: boolean }) {
   const original = client.query.bind(client)
-  const sessionMode = preferSessionTenantSetting()
+  const sessionMode = options?.session ?? workersSessionTenantRls()
   let sessionArmed: string | null | undefined
   let arming = false
 

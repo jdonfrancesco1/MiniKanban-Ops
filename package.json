@@ -7,6 +7,7 @@
     "dev": "next dev",
     "lint": "eslint .",
     "test": "node --experimental-strip-types --test lib/db/reconcile-ops.test.ts lib/db/fingerprint.test.ts lib/db/errors.test.ts lib/db/request-scope.test.ts lib/db/tenant-id.test.ts lib/db/tenant-rls.test.ts lib/auth/credentials.test.ts lib/provision/provision.test.ts lib/ops-board.test.ts lib/ops-live-drag.test.ts lib/projects.test.ts lib/card-copy.test.ts lib/preview-ops-cards.test.ts lib/task-dates.test.ts lib/task-short-id.test.ts lib/close-sub-status.test.ts lib/task-description.test.ts lib/kanban-dnd.test.ts lib/mcp/lookup.test.ts lib/mcp/auth.test.ts lib/mcp/tools.test.ts lib/mcp/protocol.test.ts lib/mcp/http.test.ts lib/mcp/plugin-package.test.ts lib/ops/access.test.ts lib/ops/isolation-proof.test.ts",
+    "typecheck": "node scripts/typecheck.mjs",
     "test:e2e": "playwright test",
     "start": "next start -H 0.0.0.0 -p ${PORT:-3000}",
     "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",

@@ -1,0 +1,7 @@
+{
+  // Server modules the hermetic suite and the RLS arm cover. The Next UI
+  // (app pages, components) still has older type errors outside this change.
+  "extends": "./tsconfig.json",
+  "include": ["next-env.d.ts", "lib/**/*.ts", "app/api/**/*.ts", "middleware.ts"],
+  "exclude": ["node_modules", "**/*.test.ts"]
+}

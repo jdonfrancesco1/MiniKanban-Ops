@@ -9,12 +9,14 @@ import { FLEET_TENANT_ID } from "./ops-defaults.ts"
 import {
   armVerifiedTenantRls,
   attachTenantRls,
+  bindTenantRlsArm,
   runAsVerifiedTenant,
   runInRequestScope,
-  setCurrentTenantRlsArm,
+  runWithRequestDb,
   setVerifiedTenantResolver,
   TENANT_SETTING_SQL,
   TENANT_SETTING_SQL_SESSION,
+  workersSessionTenantRls,
 } from "./tenant-rls.ts"
 
 function read(path: string) {
@@ -74,6 +76,89 @@ function openClient(delay?: (text: string) => Promise<void>) {
   }
   attachTenantRls(client)
   return { client, log }
+}
+
+/** Same predicate as drizzle/0006: unset or blank app.tenant_id matches nothing. */
+const BOARD_ROWS = [{ tenant_id: "alpha" }, { tenant_id: "beta" }, { tenant_id: "fleet" }]
+
+type ConnState = {
+  sessionGuc: string | null
+  localGuc: string | null
+  inTx: boolean
+}
+
+function gucValue(values: unknown) {
+  const raw = Array.isArray(values) ? values[0] : undefined
+  return raw == null ? "" : String(raw)
+}
+
+function visibleTenant(conn: ConnState) {
+  const raw = conn.inTx && conn.localGuc != null ? conn.localGuc : conn.sessionGuc
+  if (raw == null || raw === "") return null
+  return raw
+}
+
+function applyGuc(conn: ConnState, text: string, values: unknown) {
+  const command = text.trim().toLowerCase()
+  if (command === "begin" || command.startsWith("start transaction")) {
+    conn.inTx = true
+    return
+  }
+  if (/^commit\b/.test(command) || (command.startsWith("rollback") && !command.startsWith("rollback to"))) {
+    conn.inTx = false
+    conn.localGuc = null
+    return
+  }
+  if (text === TENANT_SETTING_SQL) conn.localGuc = gucValue(values)
+  if (text === TENANT_SETTING_SQL_SESSION) conn.sessionGuc = gucValue(values)
+}
+
+function openTrackedClient(options?: { session?: boolean }) {
+  const conn: ConnState = { sessionGuc: null, localGuc: null, inTx: false }
+  const log: Logged[] = []
+  const client = {
+    async query(config: unknown, values?: unknown) {
+      const text = queryText(config)
+      const valuesRecorded = recordedValues(config, values)
+      log.push({ text, values: valuesRecorded })
+      applyGuc(conn, text, valuesRecorded)
+      if (
+        text === TENANT_SETTING_SQL ||
+        text === TENANT_SETTING_SQL_SESSION ||
+        text === "begin" ||
+        text === "commit" ||
+        text === "rollback"
+      ) {
+        return { rows: [], rowCount: 0 }
+      }
+      if (text.includes("current_setting")) {
+        return { rows: [{ tenant: visibleTenant(conn) }], rowCount: 1 }
+      }
+      if (text.trim().toLowerCase().startsWith("select")) {
+        const tenant = visibleTenant(conn)
+        const rows = tenant ? BOARD_ROWS.filter((row) => row.tenant_id === tenant) : []
+        return { rows, rowCount: rows.length }
+      }
+      return { rows: [], rowCount: 0 }
+    },
+  }
+  const arm = attachTenantRls(client, options)
+  return { client, log, arm, conn }
+}
+
+async function withUserAgent<T>(userAgent: string, fn: () => Promise<T> | T): Promise<T> {
+  const descriptor = Object.getOwnPropertyDescriptor(globalThis, "navigator")
+  Object.defineProperty(globalThis, "navigator", {
+    configurable: true,
+    enumerable: true,
+    value: { userAgent },
+  })
+  try {
+    return await fn()
+  } finally {
+    if (descriptor) Object.defineProperty(globalThis, "navigator", descriptor)
+    else Reflect.deleteProperty(globalThis, "navigator")
+  }
 }
 
 function settings(log: Logged[]) {
@@ -261,46 +346,172 @@ describe("verified tenant is installed inside each transaction", { concurrency: 
     assert.deepEqual(settings(devGate.log), [[FLEET_TENANT_ID]])
   })
 
-  it("defaults to a synchronous session arm instead of BEGIN wrapping", async () => {
-    function sessionClient() {
-      const log: Logged[] = []
-      const client = {
-        async query(config: unknown, values?: unknown) {
-          log.push({ text: queryText(config), values: recordedValues(config, values) })
-          return { rows: [], rowCount: 0 }
-        },
-      }
-      const arm = attachTenantRls(client)
-      return { client, log, arm }
-    }
-
-    delete process.env.OPS_TENANT_RLS_SESSION
-    const unset = sessionClient()
-    assert.equal(unset.client.query.constructor.name, "Function")
-    setCurrentTenantRlsArm(unset.arm)
-    await armVerifiedTenantRls("alpha")
-    await unset.client.query("select 1")
-    assert.deepEqual(
-      unset.log.map((entry) => entry.text),
-      [TENANT_SETTING_SQL_SESSION, "select 1"],
-    )
-    assert.deepEqual(unset.log[0]?.values, ["alpha"])
-    assert.match(TENANT_SETTING_SQL_SESSION, /set_config\('app\.tenant_id', \$1, false\)/)
-    assert.equal(unset.log.some((entry) => entry.text === "begin"), false)
-
+  it("uses a synchronous session arm only on the Workers runtime", async () => {
+    assert.equal(workersSessionTenantRls(), false)
     process.env.OPS_TENANT_RLS_SESSION = "1"
-    const forced = sessionClient()
-    assert.equal(forced.client.query.constructor.name, "Function")
-    setCurrentTenantRlsArm(forced.arm)
-    await armVerifiedTenantRls("fleet")
-    await forced.client.query("select 1")
-    assert.deepEqual(
-      forced.log.map((entry) => entry.text),
-      [TENANT_SETTING_SQL_SESSION, "select 1"],
-    )
-    assert.deepEqual(forced.log[0]?.values, ["fleet"])
+    assert.equal(workersSessionTenantRls(), false)
+    const nodeExplicit = openTrackedClient()
+    assert.equal(nodeExplicit.client.query.constructor.name, "AsyncFunction")
 
-    setCurrentTenantRlsArm(null)
+    await withUserAgent("Cloudflare-Workers", async () => {
+      delete process.env.OPS_TENANT_RLS_SESSION
+      assert.equal(workersSessionTenantRls(), true)
+      const unset = openTrackedClient()
+      const unsetDb = {}
+      bindTenantRlsArm(unsetDb, unset.arm)
+      assert.equal(unset.client.query.constructor.name, "Function")
+      await runWithRequestDb(unsetDb, async () => {
+        await armVerifiedTenantRls("alpha")
+        await unset.client.query("select 1")
+      })
+      assert.deepEqual(
+        unset.log.map((entry) => entry.text),
+        [TENANT_SETTING_SQL_SESSION, "select 1"],
+      )
+      assert.deepEqual(unset.log[0]?.values, ["alpha"])
+      assert.match(TENANT_SETTING_SQL_SESSION, /set_config\('app\.tenant_id', \$1, false\)/)
+      assert.equal(unset.log.some((entry) => entry.text === "begin"), false)
+
+      process.env.OPS_TENANT_RLS_SESSION = "1"
+      assert.equal(workersSessionTenantRls(), true)
+      const forced = openTrackedClient()
+      const forcedDb = {}
+      bindTenantRlsArm(forcedDb, forced.arm)
+      assert.equal(forced.client.query.constructor.name, "Function")
+      await runWithRequestDb(forcedDb, async () => {
+        await armVerifiedTenantRls("fleet")
+        await forced.client.query("select 1")
+      })
+      assert.deepEqual(
+        forced.log.map((entry) => entry.text),
+        [TENANT_SETTING_SQL_SESSION, "select 1"],
+      )
+      assert.deepEqual(forced.log[0]?.values, ["fleet"])
+
+      process.env.OPS_TENANT_RLS_SESSION = "0"
+      assert.equal(workersSessionTenantRls(), false)
+      const forcedOff = openTrackedClient()
+      assert.equal(forcedOff.client.query.constructor.name, "AsyncFunction")
+    })
+
+    process.env.OPS_TENANT_RLS_SESSION = "0"
+  })
+
+  it("returns no rows when the request client is not armed", async () => {
+    const tracked = openTrackedClient({ session: true })
+    const db = {}
+    bindTenantRlsArm(db, tracked.arm)
+    const unarmed = await runWithRequestDb(db, () => tracked.client.query("SELECT tenant_id FROM boards"))
+    assert.equal(unarmed.rows.length, 0)
+    assert.notEqual(unarmed.rows.length, BOARD_ROWS.length)
+    assert.equal(tracked.conn.sessionGuc, null)
+    assert.equal(tracked.log.some((entry) => entry.text === TENANT_SETTING_SQL_SESSION), false)
+
+    const other = openTrackedClient({ session: true })
+    bindTenantRlsArm({}, other.arm)
+    await armVerifiedTenantRls("alpha")
+    const missed = await other.client.query("SELECT tenant_id FROM boards")
+    assert.equal(missed.rows.length, 0)
+    assert.equal(other.conn.sessionGuc, null)
+  })
+
+  it("shows each concurrent isolate request only its own tenant rows", async () => {
+    const alpha = openTrackedClient({ session: true })
+    const beta = openTrackedClient({ session: true })
+    const dbAlpha = { id: "alpha" }
+    const dbBeta = { id: "beta" }
+    bindTenantRlsArm(dbAlpha, alpha.arm)
+    bindTenantRlsArm(dbBeta, beta.arm)
+
+    let alphaArmed = false
+    let releaseAlpha!: () => void
+    const gate = new Promise<void>((resolve) => {
+      releaseAlpha = resolve
+    })
+
+    const first = runWithRequestDb(dbAlpha, async () => {
+      await armVerifiedTenantRls("alpha")
+      alphaArmed = true
+      await gate
+      return alpha.client.query("SELECT tenant_id FROM boards")
+    })
+
+    for (let i = 0; i < 50 && !alphaArmed; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 5))
+    }
+    assert.equal(alphaArmed, true)
+
+    const second = runWithRequestDb(dbBeta, async () => {
+      await armVerifiedTenantRls("beta")
+      releaseAlpha()
+      return beta.client.query("SELECT tenant_id FROM boards")
+    })
+
+    const [alphaRows, betaRows] = await Promise.all([first, second])
+    assert.deepEqual(
+      alphaRows.rows.map((row) => row.tenant_id),
+      ["alpha"],
+    )
+    assert.deepEqual(
+      betaRows.rows.map((row) => row.tenant_id),
+      ["beta"],
+    )
+    assert.deepEqual(
+      alpha.log.filter((entry) => entry.text === TENANT_SETTING_SQL_SESSION).map((entry) => entry.values),
+      [["alpha"]],
+    )
+    assert.deepEqual(
+      beta.log.filter((entry) => entry.text === TENANT_SETTING_SQL_SESSION).map((entry) => entry.values),
+      [["beta"]],
+    )
+    assert.equal(alpha.conn.sessionGuc, "alpha")
+    assert.equal(beta.conn.sessionGuc, "beta")
+    assert.equal(alpha.log.some((entry) => entry.text === "begin"), false)
+    assert.equal(beta.log.some((entry) => entry.text === "begin"), false)
+  })
+
+  it("does not leave a session GUC set on the shared Node client after a request", async () => {
+    process.env.OPS_TENANT_RLS_SESSION = "1"
+    assert.equal(workersSessionTenantRls(), false)
+    const { client, log, conn } = openTrackedClient()
+    assert.equal(client.query.constructor.name, "AsyncFunction")
+
+    setVerifiedTenantResolver(() => "alpha")
+    const seenAlpha = await runInRequestScope(() => client.query("SELECT tenant_id FROM boards"))
+    assert.deepEqual(
+      seenAlpha.rows.map((row) => row.tenant_id),
+      ["alpha"],
+    )
+    assert.equal(conn.sessionGuc, null)
+    assert.equal(conn.localGuc, null)
+    assert.equal(conn.inTx, false)
+
+    setVerifiedTenantResolver(() => "beta")
+    const seenBeta = await runInRequestScope(() => client.query("SELECT tenant_id FROM boards"))
+    assert.deepEqual(
+      seenBeta.rows.map((row) => row.tenant_id),
+      ["beta"],
+    )
+    assert.equal(conn.sessionGuc, null)
+    assert.equal(conn.inTx, false)
+
+    setVerifiedTenantResolver(() => null)
+    const unarmed = await runInRequestScope(() => client.query("SELECT tenant_id FROM boards"))
+    assert.equal(unarmed.rows.length, 0)
+    const setting = await runInRequestScope(() =>
+      client.query("SELECT current_setting('app.tenant_id', true) AS tenant"),
+    )
+    assert.equal(setting.rows[0]?.tenant ?? null, null)
+    assert.equal(conn.sessionGuc, null)
+    assert.equal(conn.localGuc, null)
+    assert.equal(conn.inTx, false)
+    assert.equal(log.some((entry) => entry.text === TENANT_SETTING_SQL_SESSION), false)
+    assert.deepEqual(
+      log.filter((entry) => entry.text === TENANT_SETTING_SQL).map((entry) => entry.values),
+      [["alpha"], ["beta"]],
+    )
+    assert.match(TENANT_SETTING_SQL, /set_config\('app\.tenant_id', \$1, true\)/)
+
     process.env.OPS_TENANT_RLS_SESSION = "0"
   })
 
@@ -338,7 +549,15 @@ describe("database client coverage", () => {
 
     const open = index.slice(index.indexOf("function openClient"))
     assert.equal(open.indexOf("attachTenantRls") < open.indexOf("drizzle("), true)
+    assert.match(open, /attachTenantRls\(client, \{ session: workersSessionTenantRls\(\) \}\)/)
+    assert.match(open, /bindTenantRlsArm\(database, arm\)/)
+    assert.match(index, /bindRequestDb\(/)
     assert.equal(index.includes("new Client"), true)
+    assert.doesNotMatch(codeOnly(index), /setCurrentTenantRlsArm/)
+    assert.doesNotMatch(codeOnly(rls), /setCurrentTenantRlsArm|currentArm/)
+    assert.match(rls, /if \(!isWorkersRuntime\(\)\) return false/)
+    const actor = session.slice(session.indexOf("export async function requireActorTenant"))
+    assert.equal(actor.indexOf("getDb()") < actor.indexOf("armVerifiedTenantRls(identity.tenantId)"), true)
 
     const clientFiles = production.filter((file) => source(file).includes("new Client"))
     assert.deepEqual(

@@ -25,7 +25,10 @@ function base64UrlToBytes(value: string) {
  * Unset, or equal to the fleet secret, fails closed (no customer cookie).
  */
 export function customerSessionSigningKey(
-  env: { OPS_TENANT_SESSION_SECRET?: string; OPS_BOARD_SECRET?: string } = process.env,
+  env: { OPS_TENANT_SESSION_SECRET?: string; OPS_BOARD_SECRET?: string } = {
+    OPS_TENANT_SESSION_SECRET: process.env.OPS_TENANT_SESSION_SECRET,
+    OPS_BOARD_SECRET: process.env.OPS_BOARD_SECRET,
+  },
 ) {
   const key = env.OPS_TENANT_SESSION_SECRET?.trim() ?? ""
   if (!key) return null

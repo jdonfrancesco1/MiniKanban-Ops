@@ -63,9 +63,10 @@ export async function requireOpsSession() {
 export async function requireActorTenant() {
   const identity = await resolveAuthIdentity()
   if (!identity?.tenantId) throw new OpsAccessError(401)
-  // Open the request Client first so attachTenantRls can register the arm
-  // callback, then set_config(app.tenant_id) for FORCE RLS. Do not use async
-  // client.query wrapping on Workers (breaks Neon on cloudflare:sockets).
+  // Open this request's Client and bind its arm, then set_config(app.tenant_id)
+  // for FORCE RLS. The arm is the one on this client (AsyncLocalStorage +
+  // WeakMap), not a process-wide slot. Do not wrap client.query in an async
+  // function on Workers (breaks Neon on cloudflare:sockets).
   const { getDb } = await import("@/lib/db")
   getDb()
   await armVerifiedTenantRls(identity.tenantId)
