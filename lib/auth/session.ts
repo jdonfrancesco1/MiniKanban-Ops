@@ -3,7 +3,7 @@ import { loadTenantCredentialRecords } from "@/lib/auth/credential-store"
 import { decideRequestAuth } from "@/lib/auth/decide"
 import { getPresentedOpsSecret } from "@/lib/auth/request"
 import { customerSessionSigningKey } from "@/lib/auth/tenant-session"
-import { setVerifiedTenantResolver } from "@/lib/db/tenant-rls"
+import { armVerifiedTenantRls, setVerifiedTenantResolver } from "@/lib/db/tenant-rls"
 import { OpsAccessError } from "@/lib/ops/access"
 import {
   createSessionToken,
@@ -63,6 +63,12 @@ export async function requireOpsSession() {
 export async function requireActorTenant() {
   const identity = await resolveAuthIdentity()
   if (!identity?.tenantId) throw new OpsAccessError(401)
+  // Open the request Client first so attachTenantRls can register the arm
+  // callback, then set_config(app.tenant_id) for FORCE RLS. Do not use async
+  // client.query wrapping on Workers (breaks Neon on cloudflare:sockets).
+  const { getDb } = await import("@/lib/db")
+  getDb()
+  await armVerifiedTenantRls(identity.tenantId)
   return identity.tenantId
 }
 
