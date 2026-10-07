@@ -2,7 +2,20 @@
 
 Ops kanban for James ↔ Grok Bot (Orca) work progress.
 
-Source: leftover MiniKanban V0 app (`mini-kanban-app-v-2-0`), now a private single-user board on **Neon + Drizzle** (same stack as Giant Mind: `drizzle-orm` + `pg`). Firebase is gone.
+Source: leftover MiniKanban V0 app (`mini-kanban-app-v-2-0`), on **Neon + Drizzle** (same stack as Giant Mind: `drizzle-orm` + `pg`). Firebase is gone.
+
+## Tenants
+
+The hosted model is multi-customer: one shared Worker, one Postgres, and a per-tenant secret. It is not a single-user gate forever.
+
+| Actor | Secret | What it opens |
+| --- | --- | --- |
+| Fleet dogfood | `OPS_BOARD_SECRET` | Tenant `fleet` only. The workers.dev plugin connector and the James ↔ Orca board. |
+| External customer | `MINIKANBAN_TENANT_SECRET` from `POST /api/ops/provision` | That customer's boards and tasks only. |
+
+The fleet board is not the customer connector. Dogfood on the fleet board is not an External customer. A customer secret does not open the fleet board. The fleet secret does not open a customer tenant.
+
+Sell HOLD stays. Marketplace submit and a visitor-facing sale stay held until all three are true on the live path: `drizzle/0006_force_rls.sql` is applied, provision secrets are live (`drizzle/0007_tenant_provision.sql` and `OPS_PROVISION_SECRET` in the server env, never in git), and the A-vs-B proof has passed. The hermetic half is `lib/ops/isolation-proof.test.ts` (`npm test`). The non-prod half is two synthetic tenants in [docs/a-vs-b-isolation-proof.md](docs/a-vs-b-isolation-proof.md) (`node scripts/isolation-soft-prove.mjs`). That script refuses the production Worker and does not apply Neon migrations. This README is not visitor sell copy.
 
 ## Intent
 
@@ -127,7 +140,7 @@ Fleet board: enter `OPS_BOARD_SECRET` on `/` or `/auth`. That secret is tenant `
 
 Customer tenants each have their own high-entropy secret. `tenant_credentials` stores a per-tenant salt and HMAC verifier, not the secret. A customer session cookie encodes that tenant id and is checked against the credential row. `{ uid: "ops" }` is returned only for the fleet tenant. Tenant id is taken from the verified secret or session. It is not taken from `?tenant=`, a JSON `tenant_id`, or a client header.
 
-Sell HOLD stays. This does not make the hosted board multi-customer ready and does not unlock a sale. `/api/ops/*` and MCP read and write only the verified tenant's rows. A board id or task id from another tenant is rejected and does not return that row. Those app checks stay. `drizzle/0006_force_rls.sql` is a separate control: after it is applied, Postgres enforces the same tenant boundary on the table owner. This change does not apply that migration to production Neon and does not deploy the Worker. Applying `drizzle/0005_tenant_credentials.sql` is required before a customer verifier can be stored. Applying `drizzle/0007_tenant_provision.sql` is required before a buyer id can be stored. Neither file is applied to production by this slice. The provision route below is the only mint path. It does not rotate the live fleet secret and it does not submit the marketplace listing.
+Sell HOLD stays. The hosted model is multi-customer, and these checks are that boundary. They do not unlock a sale. `/api/ops/*` and MCP read and write only the verified tenant's rows. A board id or task id from another tenant is rejected and does not return that row. Those app checks stay. `drizzle/0006_force_rls.sql` is a separate control: after it is applied, Postgres enforces the same tenant boundary on the table owner. This change does not apply that migration to production Neon and does not deploy the Worker. Applying `drizzle/0005_tenant_credentials.sql` is required before a customer verifier can be stored. Applying `drizzle/0007_tenant_provision.sql` is required before a buyer id can be stored. Neither file is applied to production by this slice. The provision route below is the only mint path. It does not rotate the live fleet secret and it does not submit the marketplace listing.
 
 If `OPS_BOARD_SECRET` is unset in local development, the fleet gate is open. In production, a missing credential fails closed (401). Provision does not follow that dev gate. See [Customer provision](#customer-provision-slice-e).
 
@@ -156,7 +169,7 @@ The customer bearer then opens only that tenant through the existing `/api/ops/*
 
 ## Chat / agent API (Orca)
 
-Private first slice for James ↔ Orca dogfood. Same Neon board the Repl UI uses.
+Fleet dogfood for James ↔ Orca. Same Neon board the Repl UI uses. An External customer uses `MINIKANBAN_TENANT_SECRET`, not `OPS_BOARD_SECRET`.
 
 **Authenticate with either:**
 
@@ -274,4 +287,4 @@ Card face: project chip · decoded title · brief · muted `Created Sep 14`. Don
 
 ## Out of scope
 
-Marketplace selling. Multi-tenant public product. Wiping boards. Replacing the visual board UI. Cloudflare migration. Phone auth. Stickers product. Firebase anything. Sticker + audio uploads that depended on Firebase Storage are stubbed/disabled.
+Marketplace listing submit and visitor-facing sell copy (held; see [Tenants](#tenants)). Wiping boards. Replacing the visual board UI. Cloudflare migration. Phone auth. Stickers product. Firebase anything. Sticker + audio uploads that depended on Firebase Storage are stubbed/disabled.
