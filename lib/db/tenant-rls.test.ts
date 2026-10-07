@@ -6,7 +6,16 @@ import { PGlite } from "@electric-sql/pglite"
 import { createTenantCredential } from "../auth/credentials.ts"
 import { decideRequestAuth } from "../auth/decide.ts"
 import { FLEET_TENANT_ID } from "./ops-defaults.ts"
-import { attachTenantRls, runAsVerifiedTenant, runInRequestScope, setVerifiedTenantResolver, TENANT_SETTING_SQL } from "./tenant-rls.ts"
+import {
+  armVerifiedTenantRls,
+  attachTenantRls,
+  runAsVerifiedTenant,
+  runInRequestScope,
+  setCurrentTenantRlsArm,
+  setVerifiedTenantResolver,
+  TENANT_SETTING_SQL,
+  TENANT_SETTING_SQL_SESSION,
+} from "./tenant-rls.ts"
 
 function read(path: string) {
   return readFileSync(new URL(path, import.meta.url), "utf8")
@@ -113,6 +122,7 @@ describe("force rls migration", () => {
 
 describe("verified tenant is installed inside each transaction", { concurrency: 1 }, () => {
   beforeEach(() => {
+    process.env.OPS_TENANT_RLS_SESSION = "0"
     setVerifiedTenantResolver(() => null)
   })
 
@@ -249,6 +259,49 @@ describe("verified tenant is installed inside each transaction", { concurrency: 
     const devGate = openClient()
     await devGate.client.query("select 1")
     assert.deepEqual(settings(devGate.log), [[FLEET_TENANT_ID]])
+  })
+
+  it("defaults to a synchronous session arm instead of BEGIN wrapping", async () => {
+    function sessionClient() {
+      const log: Logged[] = []
+      const client = {
+        async query(config: unknown, values?: unknown) {
+          log.push({ text: queryText(config), values: recordedValues(config, values) })
+          return { rows: [], rowCount: 0 }
+        },
+      }
+      const arm = attachTenantRls(client)
+      return { client, log, arm }
+    }
+
+    delete process.env.OPS_TENANT_RLS_SESSION
+    const unset = sessionClient()
+    assert.equal(unset.client.query.constructor.name, "Function")
+    setCurrentTenantRlsArm(unset.arm)
+    await armVerifiedTenantRls("alpha")
+    await unset.client.query("select 1")
+    assert.deepEqual(
+      unset.log.map((entry) => entry.text),
+      [TENANT_SETTING_SQL_SESSION, "select 1"],
+    )
+    assert.deepEqual(unset.log[0]?.values, ["alpha"])
+    assert.match(TENANT_SETTING_SQL_SESSION, /set_config\('app\.tenant_id', \$1, false\)/)
+    assert.equal(unset.log.some((entry) => entry.text === "begin"), false)
+
+    process.env.OPS_TENANT_RLS_SESSION = "1"
+    const forced = sessionClient()
+    assert.equal(forced.client.query.constructor.name, "Function")
+    setCurrentTenantRlsArm(forced.arm)
+    await armVerifiedTenantRls("fleet")
+    await forced.client.query("select 1")
+    assert.deepEqual(
+      forced.log.map((entry) => entry.text),
+      [TENANT_SETTING_SQL_SESSION, "select 1"],
+    )
+    assert.deepEqual(forced.log[0]?.values, ["fleet"])
+
+    setCurrentTenantRlsArm(null)
+    process.env.OPS_TENANT_RLS_SESSION = "0"
   })
 
   it("sets a server-minted customer tenant without replacing the fleet resolver", async () => {

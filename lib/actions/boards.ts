@@ -317,36 +317,22 @@ async function touchBoard(boardId: string) {
 }
 
 export async function ensureTaskBriefColumn() {
-  await db.execute(sql`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS brief text`)
+  // Live migrations 0001–0004 already applied. The previous self-heal
+  // DDL/SELECT path was removed: the async attachTenantRls wrap rejected it
+  // on Workers → Neon (node-pg + cloudflare:sockets).
 }
 
 export async function ensureTaskCompletedAtColumn() {
-  await db.execute(sql`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS completed_at timestamptz`)
+  // No-op. drizzle/0002_task_completed_at.sql is already applied on live Neon.
 }
 
 export async function ensureTaskCloseSubStatusColumn() {
-  await db.execute(sql`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS close_sub_status text`)
-  await db.execute(sql`
-    DO $$
-    BEGIN
-      IF NOT EXISTS (
-        SELECT 1 FROM pg_constraint WHERE conname = 'tasks_close_sub_status_check'
-      ) THEN
-        ALTER TABLE tasks
-          ADD CONSTRAINT tasks_close_sub_status_check
-          CHECK (
-            close_sub_status IS NULL
-            OR close_sub_status IN ('Closed', 'No Longer Needed', 'Duplicate')
-          );
-      END IF;
-    END $$
-  `)
+  // No-op. drizzle/0003_task_close_sub_status.sql is already applied on live Neon.
 }
 
 export async function ensureTaskSchemaColumns() {
-  await ensureTaskBriefColumn()
-  await ensureTaskCompletedAtColumn()
-  await ensureTaskCloseSubStatusColumn()
+  // No-op. Callers still invoke this after a missing-column error; 0001–0003
+  // are live, so there is no runtime ALTER to retry.
 }
 
 async function withTaskSchemaColumns<T>(run: () => Promise<T>): Promise<T> {
