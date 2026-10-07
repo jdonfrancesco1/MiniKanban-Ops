@@ -39,7 +39,8 @@ function fromHex(hex: string) {
 async function hmacHex(key: Uint8Array, message: string) {
   const cryptoKey = await crypto.subtle.importKey(
     "raw",
-    key,
+    // TS 5.7 types Uint8Array's buffer as ArrayBufferLike. The bytes are the key.
+    key as unknown as BufferSource,
     { name: "HMAC", hash: "SHA-256" },
     false,
     ["sign"],
